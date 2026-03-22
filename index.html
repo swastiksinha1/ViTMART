@@ -1126,7 +1126,7 @@ const setActiveTab = (tabName, isBackAction = false) => {
   document.querySelectorAll('.nav-item').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabName));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active','animate-tab-content'));
   if (!isBackAction && navigationHistory[navigationHistory.length-1] !== tabName) navigationHistory.push(tabName);
-  if (offersUnsubscribe) offersUnsubscribe();
+  if (offersUnsubscribe && tabName !== 'product-detail') offersUnsubscribe();
   const activeTab = document.getElementById(`${tabName}-tab`);
   if (activeTab) {
     switch(tabName) {
@@ -4761,18 +4761,21 @@ const renderNotifList = (notifs) => {
           .catch(() => setActiveTab('orders'));
 
       } else if (type === 'trade_offer') {
-        // Seller received a trade offer → open their product detail with offers section
+        // Seller received a trade offer → activate the tab FIRST, then render
+        // so setActiveTab's offersUnsubscribe() fires before the listener is set up
+        setActiveTab('product-detail');
         if (pid) {
           const p = products.find(x => x.id === pid);
-          if (p) { renderProductDetailPage(p); setActiveTab('product-detail'); }
+          if (p) { renderProductDetailPage(p); }
           else setActiveTab('my-listings');
         } else { setActiveTab('my-listings'); }
 
       } else if (type === 'price_offer') {
-        // Seller received a price offer → open product detail with price offers
+        // Seller received a price offer → activate tab first, then render
+        setActiveTab('product-detail');
         if (pid) {
           const p = products.find(x => x.id === pid);
-          if (p) { renderProductDetailPage(p); setActiveTab('product-detail'); }
+          if (p) { renderProductDetailPage(p); }
           else setActiveTab('my-listings');
         } else { setActiveTab('my-listings'); }
 
