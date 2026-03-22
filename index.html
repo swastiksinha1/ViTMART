@@ -658,7 +658,7 @@ tailwind.config = {
 <div id="lost-and-found-modal" class="modal fixed inset-0 bg-gray-950/70 backdrop-blur-md flex items-center justify-center p-4 z-50">
   <div id="lost-and-found-modal-content" class="modal-content glass-strong rounded-2xl shadow-2xl w-full max-w-lg"></div>
 </div>
-<div id="trade-offer-modal" class="modal fixed inset-0 bg-gray-950/70 backdrop-blur-md flex items-center justify-center p-4 z-50">
+<div id="trade-offer-modal" class="modal fixed inset-0 bg-gray-950/75 flex items-center justify-center p-4 z-50" style="will-change:opacity">
   <div id="trade-offer-modal-content" class="modal-content glass-strong rounded-2xl shadow-2xl w-full max-w-lg"></div>
 </div>
 <div id="change-password-modal" class="modal fixed inset-0 bg-gray-950/70 backdrop-blur-md flex items-center justify-center p-4 z-50">
@@ -726,12 +726,12 @@ tailwind.config = {
 
 
   <!-- PRICE OFFER MODAL -->
-  <div id="price-offer-modal" class="modal fixed inset-0 bg-gray-950/70 backdrop-blur-md flex items-center justify-center p-4 z-50">
+  <div id="price-offer-modal" class="modal fixed inset-0 bg-gray-950/75 flex items-center justify-center p-4 z-50" style="will-change:opacity">
     <div id="price-offer-modal-content" class="modal-content glass-strong rounded-2xl shadow-2xl w-full max-w-sm p-6"></div>
   </div>
 
   <!-- EDIT PRICE MODAL -->
-  <div id="edit-price-modal" class="modal fixed inset-0 bg-gray-950/70 backdrop-blur-md flex items-center justify-center p-4 z-50">
+  <div id="edit-price-modal" class="modal fixed inset-0 bg-gray-950/75 flex items-center justify-center p-4 z-50" style="will-change:opacity">
     <div id="edit-price-modal-content" class="modal-content glass-strong rounded-2xl shadow-2xl w-full max-w-sm p-6"></div>
   </div>
 
@@ -2290,10 +2290,12 @@ const renderChangePasswordModal = () => {
 };
 
 // --- Trade Modal ---
-const renderMakeOfferModal = (productId) => {
-  uploadedTradeOfferFile = null;
+const _tradeModalReady = { setup: false };
+const _initTradeModal = () => {
+  if (_tradeModalReady.setup) return;
+  _tradeModalReady.setup = true;
   tradeOfferModalContent.innerHTML = `
-    <form id="trade-offer-form" class="p-6 space-y-4" novalidate data-product-id="${productId}">
+    <form id="trade-offer-form" class="p-6 space-y-4" novalidate>
       <div class="text-center mb-2">
         <div class="text-4xl mb-3">🔄</div>
         <h2 class="text-2xl font-black font-syne text-gray-900 dark:text-white">Make a Trade Offer</h2>
@@ -2311,8 +2313,22 @@ const renderMakeOfferModal = (productId) => {
         <button type="submit" id="submit-trade-offer-btn" class="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl font-bold shimmer-btn shadow-lg shadow-emerald-500/30">Submit Offer</button>
       </div>
     </form>`;
-  tradeOfferModal.classList.add('show');
   setupImageUploadListeners('trade-offer-drop-zone','tradeOfferImageUpload','trade-offer-image-preview','trade-offer-upload-prompt', f => uploadedTradeOfferFile = f);
+};
+
+const renderMakeOfferModal = (productId) => {
+  uploadedTradeOfferFile = null;
+  _initTradeModal(); // pre-renders HTML only once; subsequent calls are instant
+  // Reset form and update productId
+  const form = document.getElementById('trade-offer-form');
+  if (form) {
+    form.dataset.productId = productId;
+    form.reset();
+    document.getElementById('trade-offer-image-preview')?.classList.add('hidden');
+    document.getElementById('trade-offer-upload-prompt')?.classList.remove('hidden');
+  }
+  // Show immediately — no re-render needed
+  requestAnimationFrame(() => tradeOfferModal.classList.add('show'));
 };
 
 // --- Terms/Privacy Modals ---
@@ -4705,7 +4721,7 @@ const renderNotifList = (notifs) => {
   list.innerHTML = notifs.map(n => {
     const meta = NOTIF_ICONS[n.type] || NOTIF_ICONS.default;
     const ts = n.createdAt ? timeAgoStr(n.createdAt.toDate ? n.createdAt.toDate() : new Date()) : '';
-    return `<div class="notif-item ${n.read ? '' : 'unread'}" data-notif-id="${n.id}" data-product-id="${n.productId || ''}">
+    return `<div class="notif-item ${n.read ? '' : 'unread'}" data-notif-id="${n.id}" data-product-id="${n.productId || ''}" data-notif-type="${n.type || 'default'}">
       <div class="notif-icon-box ${meta.bg}">${meta.icon}</div>
       <div class="flex-grow min-w-0">
         <p class="font-bold text-sm text-gray-900 dark:text-white">${n.title}</p>
@@ -4719,19 +4735,56 @@ const renderNotifList = (notifs) => {
   list.querySelectorAll('.notif-item').forEach(item => {
     item.addEventListener('click', async () => {
       // Mark as read
-      if (!item.classList.contains('read')) {
+      if (item.classList.contains('unread')) {
         db.collection('notifications').doc(item.dataset.notifId).update({ read: true }).catch(() => {});
         item.classList.remove('unread');
         item.querySelector('.notif-dot')?.remove();
       }
-      // Navigate to product if applicable
-      const pid = item.dataset.productId;
-      if (pid) {
+      closeNotifDropdown();
+
+      const type = item.dataset.notifType;
+      const pid  = item.dataset.productId;
+
+      // Route based on notification type
+      if (type === 'purchase' || type === 'trade_accepted') {
+        // Seller got a purchase / buyer's trade was accepted → open orders
+        // Force a fresh fetch so the new order appears immediately
+        db.collection('orders').where('userId','==',currentUser.uid).get()
+          .then(snap => {
+            if (!snap.empty) {
+              orders = snap.docs
+                .map(d => ({id:d.id,...d.data()}))
+                .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+            }
+            setActiveTab('orders');
+          })
+          .catch(() => setActiveTab('orders'));
+
+      } else if (type === 'trade_offer') {
+        // Seller received a trade offer → open their product detail with offers section
+        if (pid) {
+          const p = products.find(x => x.id === pid);
+          if (p) { renderProductDetailPage(p); setActiveTab('product-detail'); }
+          else setActiveTab('my-listings');
+        } else { setActiveTab('my-listings'); }
+
+      } else if (type === 'price_offer') {
+        // Seller received a price offer → open product detail with price offers
+        if (pid) {
+          const p = products.find(x => x.id === pid);
+          if (p) { renderProductDetailPage(p); setActiveTab('product-detail'); }
+          else setActiveTab('my-listings');
+        } else { setActiveTab('my-listings'); }
+
+      } else if (pid) {
+        // Generic — open product detail if we have a product id
         const p = products.find(x => x.id === pid);
         if (p) { renderProductDetailPage(p); setActiveTab('product-detail'); }
         else setActiveTab('buy');
+
+      } else {
+        setActiveTab('orders'); // safe fallback
       }
-      closeNotifDropdown();
     });
   });
 };
