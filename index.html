@@ -2621,6 +2621,7 @@ const addToCart = (productId) => {
   if (!p||p.status!=='available') { showMessage('Item not available.','error'); return; }
   if (cart[productId]) { showMessage('Already in your cart.','success'); return; }
   showMessage('Added to cart!','success');
+  recLog(p, 'cart'); // track cart add for recommendations
   db.collection('carts').doc(currentUser.uid).collection('items').doc(productId).set({
     productId:p.id, name:p.name, price:p.price, imageUrl:p.imageUrl, id:productId, quantity:1
   }).catch(() => showMessage('Failed to add to cart.','error'));
@@ -2651,6 +2652,8 @@ const handleCheckout = async () => {
     showMessage('Purchase complete! 🎉 Redirecting to your orders…','success');
     // Notify sellers of the purchase
     if (window._afterCheckoutNotify) window._afterCheckoutNotify(items);
+    // Track each purchased item as a strong buy signal
+    items.forEach(item => { const bp = products.find(p=>p.id===item.id||p.id===item.productId); if(bp) recLog(bp,'buy'); });
     // Wait for the onSnapshot listener to pick up the new order, then navigate.
     setTimeout(() => setActiveTab('orders'), 1200);
   } catch(e) { showMessage('Payment failed: '+(e.message||e.code||'Unknown error. Check your connection.'),'error'); console.error('Checkout error:',e); }
@@ -3220,6 +3223,7 @@ const toggleWishlist = (productId) => {
   } else {
     wl.push(productId);
     showMessage('❤️ Added to wishlist!', 'success');
+    const wlProd = products.find(p=>p.id===productId); if (wlProd) recLog(wlProd, 'wishlist');
   }
   localStorage.setItem('vitmart_wishlist', JSON.stringify(wl));
   // Update all wishlist buttons for this product
@@ -3776,90 +3780,275 @@ const renderManagePage = (freshOrders) => {
 // ══════════════════════════════════════════════
 // NEW FEATURE: RECOMMENDATION SYSTEM
 // ══════════════════════════════════════════════
-const trackUserInterest = (label, action='view') => {
-  const interests = JSON.parse(localStorage.getItem('vitmart_interests')||'{}');
-  const key = label.toLowerCase();
-  if (!interests[key]) interests[key] = { count:0, actions:[] };
-  interests[key].count += action==='buy'?3 : action==='review'?2 : 1;
-  interests[key].actions.push(action);
-  if (interests[key].actions.length > 10) interests[key].actions.shift();
-  localStorage.setItem('vitmart_interests', JSON.stringify(interests));
-};
+// ═══════════════════════════════════════════════════════════
+// ░░░  RECOMMENDATION ENGINE v2  ░░░
+//
+//  Signals used (with weights):
+//    1. Category affinity       — built from views, cart adds, purchases
+//    2. Price range affinity    — learned from viewing/buying history
+//    3. Keyword affinity        — token overlap between interests & product name
+//    4. Recency decay           — recent interactions count more than old ones
+//    5. Freshness bonus         — brand-new listings get a boost
+//    6. Popularity proxy        — items wishlisted by the user get a boost
+//    7. Diversity injection     — ensures multiple categories appear
+//    8. Seller diversity        — avoids showing only one seller's items
+// ═══════════════════════════════════════════════════════════
 
-const trackBrowse = (product) => {
-  if (!product) return;
-  const hist = JSON.parse(localStorage.getItem('vitmart_browse_history')||'[]');
-  // avoid duplicates
-  const filtered = hist.filter(h => h.id !== product.id);
-  filtered.unshift({ id:product.id, name:product.name, category:product.category, price:product.price, imageUrl:product.imageUrl, time:Date.now() });
-  localStorage.setItem('vitmart_browse_history', JSON.stringify(filtered.slice(0,20)));
-  // track category interest
-  if (product.category) trackUserInterest(product.category);
-  if (product.name) trackUserInterest(product.name.split(' ').slice(0,2).join(' '));
-};
-
-const getRecommendations = () => {
-  const interests = JSON.parse(localStorage.getItem('vitmart_interests')||'{}');
-  const hist = JSON.parse(localStorage.getItem('vitmart_browse_history')||'[]');
-  const viewedIds = new Set(hist.map(h=>h.id));
-
-  // Score each available product
-  const scored = products
-    .filter(p => p.status==='available' && !viewedIds.has(p.id) && p.sellerId !== currentUser?.uid)
-    .map(p => {
-      let score = 0;
-      // Category match
-      const catKey = (p.category||'').toLowerCase();
-      if (interests[catKey]) score += interests[catKey].count * 3;
-      // Name keyword match
-      const words = p.name.toLowerCase().split(/\s+/);
-      words.forEach(w => { if (interests[w]) score += interests[w].count; });
-      // Recent browsing boost
-      const recentCategories = hist.slice(0,5).map(h=>h.category?.toLowerCase());
-      if (recentCategories.includes(catKey)) score += 5;
-      // Price range boost (similar to what user viewed)
-      const avgPrice = hist.slice(0,5).reduce((s,h)=>s+(h.price||0),0) / (hist.slice(0,5).length||1);
-      if (avgPrice > 0 && Math.abs(p.price - avgPrice) < avgPrice*0.3) score += 2;
-      return { ...p, recScore: score };
-    })
-    .sort((a,b) => b.recScore - a.recScore);
-
-  // Mix: top scored + some new arrivals
-  const topRecs = scored.slice(0,6);
-  // If not enough, fill with newest
-  if (topRecs.length < 4) {
-    const newest = products
-      .filter(p => p.status==='available' && !topRecs.find(r=>r.id===p.id))
-      .sort((a,b)=>(b.createdAt?.toMillis()||0)-(a.createdAt?.toMillis()||0))
-      .slice(0, 6-topRecs.length);
-    return [...topRecs, ...newest];
+const REC = {
+  // Action weights — how much each action boosts a category/keyword
+  WEIGHTS: { view:1, wishlist:4, cart:6, buy:10, review:3, offer:5 },
+  // Recency half-life in ms — interest halves every N days
+  HALF_LIFE_MS: 3 * 24 * 60 * 60 * 1000,  // 3 days
+  // How many items to return
+  TOP_N: 8,
+  STORAGE: {
+    EVENTS: 'vm_rec_events',    // raw event log
+    PROFILE: 'vm_rec_profile',  // computed affinity profile
   }
-  return topRecs;
+};
+
+// ── Event logging ─────────────────────────────────────────
+const recLog = (product, action) => {
+  if (!product) return;
+  const events = JSON.parse(localStorage.getItem(REC.STORAGE.EVENTS) || '[]');
+  events.unshift({
+    id: product.id,
+    name: product.name,
+    category: product.category || 'Other',
+    price: product.price || 0,
+    imageUrl: product.imageUrl || '',
+    action,
+    t: Date.now()
+  });
+  // Keep last 100 raw events
+  localStorage.setItem(REC.STORAGE.EVENTS, JSON.stringify(events.slice(0, 100)));
+  rebuildProfile();
+};
+
+// Legacy compatibility shims
+const trackUserInterest = (label, action='view') => {};  // replaced by recLog
+const trackBrowse = (product) => { if (product) recLog(product, 'view'); };
+
+// ── Profile builder ───────────────────────────────────────
+// Rebuilds the affinity profile from raw events with recency decay
+const rebuildProfile = () => {
+  const events = JSON.parse(localStorage.getItem(REC.STORAGE.EVENTS) || '[]');
+  const now = Date.now();
+  const profile = {
+    categories: {},   // category → weighted score
+    pricePoints: [],  // recent prices for price-range model
+    keywords: {},     // token → weighted score
+    seenIds: new Set(),
+  };
+
+  events.forEach(ev => {
+    const age = now - ev.t;
+    // Recency decay: score × 2^(-age / half_life)
+    const decay = Math.pow(2, -age / REC.HALF_LIFE_MS);
+    const w = (REC.WEIGHTS[ev.action] || 1) * decay;
+
+    // Category affinity
+    const cat = (ev.category || 'other').toLowerCase();
+    profile.categories[cat] = (profile.categories[cat] || 0) + w;
+
+    // Price range (use last 20 priced events)
+    if (ev.price > 0 && profile.pricePoints.length < 20) {
+      profile.pricePoints.push(ev.price);
+    }
+
+    // Keyword affinity — split name into tokens, weight each
+    const tokens = (ev.name || '').toLowerCase()
+      .replace(/[^a-z0-9ऀ-ॿ ]/g, '')
+      .split(/\s+/)
+      .filter(t => t.length > 2);  // ignore 1-2 char words
+    tokens.forEach(t => {
+      profile.keywords[t] = (profile.keywords[t] || 0) + w * 0.5;
+    });
+
+    profile.seenIds.add(ev.id);
+  });
+
+  // Compute price range: mean ± 1 std-dev
+  if (profile.pricePoints.length > 0) {
+    const mean = profile.pricePoints.reduce((s, p) => s + p, 0) / profile.pricePoints.length;
+    const variance = profile.pricePoints.reduce((s, p) => s + Math.pow(p - mean, 2), 0) / profile.pricePoints.length;
+    const std = Math.sqrt(variance);
+    profile.priceMean = mean;
+    profile.priceStd = std || mean * 0.5;  // fallback
+  }
+
+  profile.seenIds = [...profile.seenIds];  // serialize Set → Array
+  localStorage.setItem(REC.STORAGE.PROFILE, JSON.stringify(profile));
+};
+
+// ── Scorer ────────────────────────────────────────────────
+const scoreProduct = (product, profile, wishlist) => {
+  const now = Date.now();
+  let score = 0;
+  const reasons = [];
+
+  // 1. Category affinity (0–30 pts)
+  const cat = (product.category || 'other').toLowerCase();
+  const catScore = (profile.categories[cat] || 0) * 3;
+  if (catScore > 0) {
+    score += Math.min(catScore, 30);
+    reasons.push({ label: cat, pts: Math.min(catScore, 30) });
+  }
+
+  // 2. Keyword affinity (0–20 pts)
+  const tokens = (product.name || '').toLowerCase()
+    .replace(/[^a-z0-9ऀ-ॿ ]/g, '')
+    .split(/\s+/)
+    .filter(t => t.length > 2);
+  let kwScore = 0;
+  tokens.forEach(t => { kwScore += (profile.keywords[t] || 0); });
+  if (kwScore > 0) {
+    score += Math.min(kwScore * 2, 20);
+    reasons.push({ label: 'keyword match', pts: Math.min(kwScore * 2, 20) });
+  }
+
+  // 3. Price range affinity (0–15 pts)
+  if (profile.priceMean && product.price > 0) {
+    const dist = Math.abs(product.price - profile.priceMean);
+    const tolerance = profile.priceStd * 1.5;
+    if (dist <= tolerance) {
+      const pts = 15 * (1 - dist / tolerance);
+      score += pts;
+      reasons.push({ label: 'price match', pts: Math.round(pts) });
+    }
+  }
+
+  // 4. Freshness bonus — items < 48h old get up to 10 pts
+  const ageMs = now - (product.createdAt?.toMillis?.() || 0);
+  if (ageMs < 48 * 3600000) {
+    const freshPts = 10 * (1 - ageMs / (48 * 3600000));
+    score += freshPts;
+    reasons.push({ label: 'new listing', pts: Math.round(freshPts) });
+  }
+
+  // 5. Wishlist boost — if user already saved it
+  if (wishlist.includes(product.id)) {
+    score += 8;
+    reasons.push({ label: 'in wishlist', pts: 8 });
+  }
+
+  // 6. Tradeable bonus — if user has engaged with trade section
+  if (product.isTradeable && (profile.categories['trade'] || 0) > 0) {
+    score += 3;
+  }
+
+  return { score, reasons };
+};
+
+// ── Main recommendation getter ────────────────────────────
+const getRecommendations = (limit = REC.TOP_N) => {
+  rebuildProfile();
+  const profile = JSON.parse(localStorage.getItem(REC.STORAGE.PROFILE) || '{}');
+  const seenIds = new Set(profile.seenIds || []);
+  const wishlist = JSON.parse(localStorage.getItem('vitmart_wishlist') || '[]');
+
+  const candidates = products.filter(p =>
+    p.status === 'available' &&
+    p.sellerId !== currentUser?.uid
+  );
+
+  if (candidates.length === 0) return [];
+
+  // Score every candidate
+  const scored = candidates.map(p => {
+    const { score, reasons } = scoreProduct(p, profile, wishlist);
+    // Slight penalty for already-seen items (still show them, just lower)
+    const seenPenalty = seenIds.has(p.id) ? 0.6 : 1.0;
+    return { ...p, recScore: score * seenPenalty, recReasons: reasons };
+  }).sort((a, b) => b.recScore - a.recScore);
+
+  // ── Diversity pass ──────────────────────────────────────
+  // Ensure we don't show 6 items from the same category or seller.
+  // Use a greedy fill: pick top item, then pick next best that adds diversity.
+  const result = [];
+  const catCount = {};
+  const sellerCount = {};
+  const MAX_PER_CAT = 2;
+  const MAX_PER_SELLER = 2;
+
+  // First pass: fill from top scored with diversity
+  for (const p of scored) {
+    if (result.length >= limit) break;
+    const cat = p.category || 'Other';
+    const seller = p.sellerId;
+    if ((catCount[cat] || 0) >= MAX_PER_CAT) continue;
+    if ((sellerCount[seller] || 0) >= MAX_PER_SELLER) continue;
+    result.push(p);
+    catCount[cat] = (catCount[cat] || 0) + 1;
+    sellerCount[seller] = (sellerCount[seller] || 0) + 1;
+  }
+
+  // Second pass: fill remaining slots with best available (relax diversity)
+  if (result.length < Math.min(limit, candidates.length)) {
+    const resultIds = new Set(result.map(p => p.id));
+    for (const p of scored) {
+      if (result.length >= limit) break;
+      if (!resultIds.has(p.id)) result.push(p);
+    }
+  }
+
+  return result;
+};
+
+// ── Why recommended label ─────────────────────────────────
+const getRecReasonLabel = (product) => {
+  if (!product.recReasons || product.recReasons.length === 0) return 'New';
+  const top = product.recReasons.sort((a, b) => b.pts - a.pts)[0];
+  const labels = {
+    'new listing': '🆕 Just listed',
+    'in wishlist': '❤️ Saved',
+    'keyword match': '🔍 Matches interests',
+    'price match': '💰 In your range',
+    'books': '📚 You like Books',
+    'electronics': '💻 You browse Electronics',
+    'furniture': '🪑 You like Furniture',
+    'clothing': '👗 You like Clothing',
+    'stationery': '✏️ You like Stationery',
+    'sports gear': '⚽ You like Sports Gear',
+    'services': '🛠️ You like Services',
+    'other': '✨ Recommended',
+  };
+  return labels[top.label] || `🔁 Based on ${top.label}`;
 };
 
 const renderRecommendationsSection = (containerId) => {
   const c = document.getElementById(containerId);
   if (!c || !currentUser) return;
-  const recs = getRecommendations();
+  const recs = getRecommendations(8);
   if (recs.length === 0) { c.innerHTML=''; return; }
 
   c.innerHTML = `
-    <div class="mt-12 mb-2">
-      <p class="section-eyebrow mb-2">Just For You</p>
-      <h3 class="text-2xl font-black text-gray-900 dark:text-white">✨ Recommended <span class="grad-text-vp">For You</span></h3>
-      <p class="text-gray-500 dark:text-gray-400 text-sm mt-1">Based on your browsing & interests</p>
+    <div class="mt-12 mb-2 flex items-end justify-between">
+      <div>
+        <p class="section-eyebrow mb-2">Just For You</p>
+        <h3 class="text-2xl font-black text-gray-900 dark:text-white">✨ Recommended <span class="grad-text-vp">For You</span></h3>
+        <p class="text-gray-500 dark:text-gray-400 text-sm mt-1">Personalised based on what you browse, wishlist & buy</p>
+      </div>
     </div>
-    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 mt-5">
-      ${recs.map(p => `
-        <div class="rec-card" data-action="view-details" data-id="${p.id}">
-          ${p.recScore > 5 ? `<div class="rec-badge">✨ Top Pick</div>` : ''}
-          <img src="${p.imageUrl||'https://placehold.co/200x160/e8e0ff/7c3aed?text=?'}" alt="${p.name}" class="w-full h-36 object-cover">
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mt-5">
+      ${recs.map(p => {
+        const reason = getRecReasonLabel(p);
+        const isFresh = p.recReasons?.some(r => r.label === 'new listing');
+        const isWishlisted = p.recReasons?.some(r => r.label === 'in wishlist');
+        const badgeClass = isFresh ? 'background:linear-gradient(135deg,#10b981,#059669)' : isWishlisted ? 'background:linear-gradient(135deg,#f43f5e,#e11d48)' : 'background:linear-gradient(135deg,#7c3aed,#06b6d4)';
+        return `
+        <div class="rec-card group" data-action="view-details" data-id="${p.id}">
+          <div style="position:relative;overflow:hidden">
+            <img src="${p.imageUrl||'https://placehold.co/200x160/e8e0ff/7c3aed?text=?'}" alt="${p.name}" class="w-full h-40 object-cover transition-transform duration-500 group-hover:scale-105">
+            <div style="position:absolute;top:8px;left:8px;${badgeClass};color:white;font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;letter-spacing:0.04em;white-space:nowrap;max-width:calc(100% - 16px);overflow:hidden;text-overflow:ellipsis">${reason}</div>
+          </div>
           <div class="p-3">
             <p class="font-bold text-gray-900 dark:text-white text-sm truncate">${p.name}</p>
-            <p class="text-xs text-gray-400 truncate mb-2">${p.category||'Other'}</p>
-            <p class="font-black grad-text-vp text-base">₹${p.price?.toFixed(0)||'—'}</p>
+            <p class="text-xs text-gray-400 truncate mt-0.5">${p.category||'Other'} · by ${p.sellerName||'Student'}</p>
+            <p class="font-black grad-text-vp text-base mt-2">₹${p.price?.toFixed(0)||'—'}</p>
           </div>
-        </div>`).join('')}
+        </div>`;
+      }).join('')}
     </div>`;
 };
 
@@ -3938,12 +4127,12 @@ const homeRecObs = new MutationObserver(() => {
           </div>
           <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             ${recs.map(p=>`
-              <div class="rec-card" data-action="view-details" data-id="${p.id}">
-                ${p.recScore>5?`<div class="rec-badge">Top Pick</div>`:''}
-                <img src="${p.imageUrl||'https://placehold.co/200x160/e8e0ff/7c3aed?text=?'}" class="w-full h-32 object-cover">
+              <div class="rec-card group" data-action="view-details" data-id="${p.id}" style="position:relative">
+                <img src="${p.imageUrl||'https://placehold.co/200x160/e8e0ff/7c3aed?text=?'}" class="w-full h-32 object-cover transition-transform duration-500 group-hover:scale-105">
                 <div class="p-3">
                   <p class="font-bold text-sm text-gray-900 dark:text-white truncate">${p.name}</p>
-                  <p class="font-black grad-text-vp">₹${p.price?.toFixed(0)||'—'}</p>
+                  <p class="text-xs text-gray-400 truncate mt-0.5">${p.category||'Other'}</p>
+                  <p class="font-black grad-text-vp text-sm mt-1">₹${p.price?.toFixed(0)||'—'}</p>
                 </div>
               </div>`).join('')}
           </div>`;
