@@ -1474,9 +1474,7 @@ const renderHeaderActions = () => {
         <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
         <span id="notif-unread-badge">0</span>
       </button>
-      <button data-tab="reviews" class="icon-btn p-2 rounded-xl glass hover:shadow-lg hover:shadow-amber-500/20 transition-all duration-200 animate-subtle-pop" data-tooltip="Reviews" style="animation-delay:50ms" aria-label="Reviews">
-        <svg class="w-5 h-5 text-amber-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
-      </button>
+
       <button data-tab="manage" class="icon-btn p-2 rounded-xl glass hover:shadow-lg hover:shadow-rose-500/20 transition-all duration-200 animate-subtle-pop" data-tooltip="Manage" style="animation-delay:75ms" aria-label="Manage data">
         <svg class="w-5 h-5 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
       </button>
@@ -1877,9 +1875,12 @@ const createProductCard = (product) => {
   let actionArea = '';
   if (product.sellerId === currentUser?.uid && (product.status==='available'||product.status==='pending')) {
     actionArea = `
-      <div class="flex items-center gap-2 pointer-events-auto">
-        <span class="px-3 py-1 bg-vit-100 dark:bg-vit-900/40 text-vit-700 dark:text-vit-300 text-xs font-bold rounded-full">Your Listing</span>
-        <button class="delete-product-btn p-1.5 text-gray-400 hover:text-rose-500 rounded-lg glass transition-colors" data-id="${product.id}">
+      <div class="flex items-center gap-1.5 pointer-events-auto flex-wrap">
+        <span class="px-2.5 py-1 bg-vit-100 dark:bg-vit-900/40 text-vit-700 dark:text-vit-300 text-xs font-bold rounded-full">Your Listing</span>
+        <button class="close-listing-btn p-1.5 text-gray-400 hover:text-amber-500 rounded-lg glass transition-colors" data-id="${product.id}" title="Close listing (hide from marketplace)">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+        </button>
+        <button class="delete-product-btn p-1.5 text-gray-400 hover:text-rose-500 rounded-lg glass transition-colors" data-id="${product.id}" title="Delete listing permanently">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
         </button>
       </div>`;
@@ -1889,7 +1890,7 @@ const createProductCard = (product) => {
     </div>`;
   }
 
-  const soldBadge = product.status==='sold' ? '<div class="badge-sold">SOLD</div>' : product.status==='traded' ? '<div class="badge-traded">TRADED</div>' : '';
+  const soldBadge = product.status==='sold' ? '<div class="badge-sold">SOLD</div>' : product.status==='traded' ? '<div class="badge-traded">TRADED</div>' : product.status==='removed' ? '<div class="badge-sold" style="background:#6b7280">CLOSED</div>' : '';
   const tradeBadge = product.isTradeable ? '<div class="badge-tradeable">🔄 Trade</div>' : '';
 
   // Quick-view strip (only for available items not owned by user)
@@ -2029,9 +2030,13 @@ const renderProductDetailPage = (product) => {
 
   const isMyProduct = currentUser?.uid === product.sellerId;
   let actionHTML = '';
-  if (product.status==='sold'||product.status==='traded') {
-    const col = product.status==='sold' ? 'from-rose-500 to-rose-600' : 'from-vit-500 to-vit-700';
-    actionHTML = `<button class="w-full py-3 bg-gradient-to-r ${col} text-white rounded-xl font-bold cursor-not-allowed opacity-75" disabled>${product.status==='sold'?'Item Sold':'Item Traded'}</button>`;
+  if (product.status==='sold'||product.status==='traded'||product.status==='removed') {
+    const col = product.status==='sold' ? 'from-rose-500 to-rose-600' : product.status==='traded' ? 'from-vit-500 to-vit-700' : 'from-gray-400 to-gray-500';
+    const label = product.status==='sold' ? 'Item Sold' : product.status==='traded' ? 'Item Traded' : 'Listing Closed';
+    actionHTML = `<button class="w-full py-3 bg-gradient-to-r ${col} text-white rounded-xl font-bold cursor-not-allowed opacity-75" disabled>${label}</button>`;
+    if (product.status==='removed' && isMyProduct) {
+      actionHTML += `<button class="reopen-listing-btn w-full py-2.5 mt-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-xl font-bold text-sm hover:-translate-y-0.5 transition-transform" data-id="${product.id}">♻️ Re-open This Listing</button>`;
+    }
   } else if (!isMyProduct) {
     actionHTML = `<button class="add-to-cart-btn w-full py-3 bg-gradient-to-r from-vit-600 to-vit-700 text-white rounded-xl font-bold shimmer-btn shadow-xl shadow-vit-500/30 mb-3" data-id="${product.id}">Add to Cart</button>`;
     if (product.isTradeable) actionHTML += `<button class="make-trade-offer-btn w-full py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl font-bold shimmer-btn shadow-xl shadow-emerald-500/30 mb-3" data-product-id="${product.id}">Make Trade Offer 🔄</button>`;
@@ -2318,7 +2323,7 @@ const renderMyListingsPage = () => {
   const c = document.getElementById('my-listings-tab');
   const mine = products.filter(p => p.sellerId===currentUser.uid);
   const avail = mine.filter(p => p.status==='available');
-  const sold = mine.filter(p => p.status==='sold'||p.status==='traded');
+  const sold = mine.filter(p => p.status==='sold'||p.status==='traded'||p.status==='removed');
   let html = `
     ${getBackButtonHTML()}
     <div class="mb-8"><p class="text-vit-600 dark:text-vit-400 text-sm font-bold uppercase tracking-widest">Your Store</p><h2 class="text-3xl font-black font-syne text-gray-900 dark:text-white mt-1">My Listings</h2></div>`;
@@ -2342,7 +2347,26 @@ const renderMyListingsPage = () => {
   const aC = document.getElementById('available-listings');
   if (aC) { if(avail.length>0) avail.forEach(p=>aC.appendChild(createProductCard(p))); else aC.innerHTML=`<p class="text-gray-400 col-span-full">No active listings.</p>`; }
   const sC = document.getElementById('sold-listings');
-  if (sC) { if(sold.length>0) sold.forEach(p=>sC.appendChild(createProductCard(p))); else sC.innerHTML=`<p class="text-gray-400 col-span-full">No sold items yet.</p>`; }
+  if (sC) {
+    if (sold.length > 0) {
+      sold.forEach(p => {
+        const card = createProductCard(p);
+        // Add re-open button for 'removed' listings
+        if (p.status === 'removed') {
+          const reOpenBtn = document.createElement('button');
+          reOpenBtn.className = 'reopen-listing-btn w-full mt-2 py-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 glass rounded-xl hover:-translate-y-0.5 transition-transform pointer-events-auto';
+          reOpenBtn.dataset.id = p.id;
+          reOpenBtn.innerHTML = '♻️ Re-open Listing';
+          reOpenBtn.style.pointerEvents = 'auto';
+          const cardBody = card.querySelector('.p-4.flex.flex-col');
+          if (cardBody) cardBody.appendChild(reOpenBtn);
+        }
+        sC.appendChild(card);
+      });
+    } else {
+      sC.innerHTML = `<p class="text-gray-400 col-span-full">No sold items yet.</p>`;
+    }
+  }
 };
 
 // --- Profile ---
@@ -3175,6 +3199,26 @@ document.body.addEventListener('click', e => {
   if (atcBtn) { addToCart(atcBtn.dataset.id); return; }
   const delBtn = e.target.closest('.delete-product-btn');
   if (delBtn) { handleDeleteProduct(delBtn.dataset.id); return; }
+  const closeBtn = e.target.closest('.close-listing-btn');
+  if (closeBtn) {
+    showConfirmModal('Close this listing? It will be hidden from the marketplace but not deleted. You can re-list it later from Manage.', async () => {
+      try {
+        await db.collection('products').doc(closeBtn.dataset.id).update({ status: 'removed' });
+        showMessage('Listing closed — hidden from marketplace.', 'success');
+      } catch(err) { showMessage('Error: ' + err.message, 'error'); }
+    });
+    return;
+  }
+  const reopenBtn = e.target.closest('.reopen-listing-btn');
+  if (reopenBtn) {
+    showConfirmModal('Re-open this listing? It will appear in the marketplace again.', async () => {
+      try {
+        await db.collection('products').doc(reopenBtn.dataset.id).update({ status: 'available' });
+        showMessage('Listing re-opened! Back in the marketplace.', 'success');
+      } catch(err) { showMessage('Error: ' + err.message, 'error'); }
+    });
+    return;
+  }
   const rmBtn = e.target.closest('.remove-from-cart-btn');
   if (rmBtn) { removeFromCart(rmBtn.dataset.id); return; }
 
@@ -5204,9 +5248,37 @@ const renderNotifList = (notifs) => {
         <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">${n.body}</p>
         <p class="text-xs text-gray-300 dark:text-gray-600 mt-1">${ts}</p>
       </div>
-      ${!n.read ? '<div class="notif-dot flex-shrink-0"></div>' : ''}
+      <div class="flex flex-col items-end gap-1 flex-shrink-0">
+        ${!n.read ? '<div class="notif-dot"></div>' : ''}
+        <button class="delete-notif-btn w-5 h-5 flex items-center justify-center text-gray-300 hover:text-rose-500 transition-colors rounded-md hover:bg-rose-50 dark:hover:bg-rose-900/20" data-notif-id="${n.id}" title="Delete notification" onclick="event.stopPropagation()">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
     </div>`;
   }).join('');
+
+  // Delete individual notification
+  list.querySelectorAll('.delete-notif-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const nid = btn.dataset.notifId;
+      const item = btn.closest('.notif-item');
+      // Animate out
+      item.style.transition = 'opacity 0.2s, transform 0.2s, max-height 0.25s';
+      item.style.opacity = '0';
+      item.style.transform = 'translateX(20px)';
+      item.style.maxHeight = item.offsetHeight + 'px';
+      setTimeout(() => {
+        item.style.maxHeight = '0';
+        item.style.overflow = 'hidden';
+        item.style.padding = '0';
+        item.style.borderBottom = 'none';
+      }, 180);
+      setTimeout(() => item.remove(), 400);
+      // Delete from Firestore
+      db.collection('notifications').doc(nid).delete().catch(() => {});
+    });
+  });
 
   list.querySelectorAll('.notif-item').forEach(item => {
     item.addEventListener('click', async () => {
@@ -5284,8 +5356,16 @@ document.body.addEventListener('click', e => {
   // Mark all read button
   if (e.target.id === 'mark-all-read-btn') {
     e.stopPropagation();
+    // Update DOM immediately (optimistic)
+    document.querySelectorAll('.notif-item.unread').forEach(el => {
+      el.classList.remove('unread');
+      el.querySelector('.notif-dot')?.remove();
+    });
+    updateNotifBadge(0);
+    // Then write to Firestore
     db.collection('notifications').where('uid','==',currentUser?.uid).where('read','==',false).get()
       .then(snap => {
+        if (snap.empty) return;
         const batch = db.batch();
         snap.docs.forEach(d => batch.update(d.ref, {read: true}));
         return batch.commit();
