@@ -3354,9 +3354,45 @@ function setupPfpUploadListeners() {
 }
 
 // --- App Init ---
+
+// ── PUBLIC DATA: products & lost-and-found are readable by everyone.
+//    Start these listeners IMMEDIATELY, before auth resolves, so the
+//    marketplace is populated the instant the page/UI becomes visible.
+//    This also fixes the race condition where setActiveTab('home') was
+//    called before the first onSnapshot fired after login. ──────────────
+let _publicListenersStarted = false;
+const startPublicListeners = () => {
+  if (_publicListenersStarted) return;
+  _publicListenersStarted = true;
+
+  productUnsubscribe = db.collection('products').orderBy('createdAt','desc').onSnapshot(snap => {
+    products = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Re-render whichever content tab is currently showing
+    const at = document.querySelector('.tab-content.active');
+    if (at && at.id !== 'product-detail-tab') {
+      setActiveTab(at.id.replace('-tab', ''), true);
+    }
+  }, err => {
+    console.error('Products listener error:', err);
+  });
+
+  lostAndFoundUnsubscribe = db.collection('lost_and_found').orderBy('createdAt','desc').onSnapshot(snap => {
+    lostAndFoundItems = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const at = document.querySelector('.tab-content.active');
+    if (at && at.id === 'lost-and-found-tab') filterAndRenderLostFoundItems();
+    else if (at && at.id === 'home-tab') renderHomepageLostAndFoundPreview();
+  }, err => {
+    console.error('Lost & Found listener error:', err);
+  });
+};
+
+// Kick off public listeners right away (no auth needed)
+startPublicListeners();
+
 auth.onAuthStateChanged(user => {
   if (emailVerificationInterval) clearInterval(emailVerificationInterval);
-  productUnsubscribe(); cartUnsubscribe(); ordersUnsubscribe(); lostAndFoundUnsubscribe(); offersUnsubscribe();
+  // Only tear down USER-SPECIFIC listeners; public ones stay alive
+  cartUnsubscribe(); ordersUnsubscribe(); offersUnsubscribe();
 
   if (user && user.emailVerified) {
     db.collection('users').doc(user.uid).get().then(d => {
@@ -3367,28 +3403,23 @@ auth.onAuthStateChanged(user => {
     if (!sessionStorage.getItem('welcomeShown')) { showWelcomeAnimation(user); sessionStorage.setItem('welcomeShown','true'); }
     else appContainer.classList.remove('opacity-0');
 
-    productUnsubscribe = db.collection('products').orderBy('createdAt','desc').onSnapshot(snap => {
-      products = snap.docs.map(d=>({id:d.id,...d.data()}));
-      const at = document.querySelector('.tab-content.active');
-      if (at&&at.id!=='product-detail-tab') setActiveTab(at.id.replace('-tab',''),true);
-    });
+    // Products & L&F are already running — no need to restart them.
+    // Just wire up the user-specific listeners.
+
     cartUnsubscribe = db.collection('carts').doc(currentUser.uid).collection('items').onSnapshot(snap => {
       cart = {};
       snap.forEach(d => { cart[d.id]={id:d.id,...d.data()}; });
       renderCart();
     });
     ordersUnsubscribe = db.collection('orders').where('userId','==',currentUser.uid).onSnapshot(snap => {
-      // Sort client-side — avoids needing a composite Firestore index on userId+createdAt
       orders = snap.docs
         .map(d => ({id:d.id,...d.data()}))
         .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
-      // FIX: re-render whichever tab is currently showing orders or manage history
       const at = document.querySelector('.tab-content.active');
       if (at && at.id === 'orders-tab') renderOrdersPage();
       if (at && at.id === 'manage-tab') renderManagePage();
     }, err => {
       console.error('Orders listener error:', err.code, err.message);
-      // Fallback: fetch once if realtime listener fails
       db.collection('orders').where('userId','==',currentUser.uid).get().then(snap => {
         orders = snap.docs
           .map(d => ({id:d.id,...d.data()}))
@@ -3397,25 +3428,26 @@ auth.onAuthStateChanged(user => {
         if (at && at.id === 'orders-tab') renderOrdersPage();
       }).catch(e => console.error('Orders fallback fetch failed:', e));
     });
-    lostAndFoundUnsubscribe = db.collection('lost_and_found').orderBy('createdAt','desc').onSnapshot(snap => {
-      lostAndFoundItems = snap.docs.map(d=>({id:d.id,...d.data()}));
-      const at = document.querySelector('.tab-content.active');
-      if (at&&at.id==='lost-and-found-tab') filterAndRenderLostFoundItems();
-      else if (at&&at.id==='home-tab') renderHomepageLostAndFoundPreview();
-    });
 
-    renderHeaderActions(); renderPopupChat(); setActiveTab('home');
+    renderHeaderActions(); renderPopupChat();
+
+    // If products are already loaded (listener was running before auth), render home now.
+    // Otherwise the onSnapshot callback will re-render once data arrives.
+    setActiveTab('home');
     setTimeout(() => document.dispatchEvent(new Event('vitmart-user-ready')), 100);
   } else {
-    currentUser=null; products=[]; cart={}; orders=[]; lostAndFoundItems=[];
-    navigationHistory=['home'];
+    currentUser = null;
+    // DO NOT clear products or lostAndFoundItems — those are public and
+    // already streaming. Only clear user-specific state.
+    cart = {}; orders = [];
+    navigationHistory = ['home'];
     sessionStorage.removeItem('welcomeShown');
     appContainer.classList.add('opacity-0');
     authModal.classList.add('show');
-    if (user&&!user.emailVerified) renderAuthModal('verify');
+    if (user && !user.emailVerified) renderAuthModal('verify');
     else renderAuthModal('signin');
     renderHeaderActions();
-    popupChatWidget.innerHTML='';
+    popupChatWidget.innerHTML = '';
   }
 });
 
