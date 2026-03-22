@@ -3006,20 +3006,22 @@ const handleForgotPassword = async (e) => {
   }
 
   try {
-    await auth.sendPasswordResetEmail(email, {
-      url: window.location.href,  // redirect back to the site after reset
-      handleCodeInApp: false
-    });
+    // No actionCodeSettings — use Firebase default (avoids domain-whitelist errors)
+    await auth.sendPasswordResetEmail(email);
     renderAuthModal('reset-sent');
   } catch(err) {
-    // Be specific about errors without leaking account existence
+    console.error('Password reset error:', err.code, err.message);
     let msg = 'Failed to send reset email. Please try again.';
     if (err.code === 'auth/user-not-found') {
-      msg = 'No account found with that email address. Check for typos or sign up.';
+      msg = 'No account found with that email. Check for typos, or sign up first.';
     } else if (err.code === 'auth/invalid-email') {
       msg = 'Please enter a valid email address.';
     } else if (err.code === 'auth/too-many-requests') {
-      msg = 'Too many requests. Please wait a minute before trying again.';
+      msg = 'Too many requests. Please wait a minute and try again.';
+    } else if (err.code === 'auth/network-request-failed') {
+      msg = 'Network error. Check your connection and try again.';
+    } else if (err.code === 'auth/invalid-continue-uri' || err.code === 'auth/unauthorized-continue-uri') {
+      msg = 'Configuration error. Please contact support.';
     }
     showMessage(msg, 'error');
     if (btn) { btn.disabled = false; btn.innerHTML = 'Send Reset Link 📧'; }
