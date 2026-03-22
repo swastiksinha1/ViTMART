@@ -1,0 +1,206 @@
+rules_version = '2';
+
+// ═══════════════════════════════════════════════════════════════════════════
+//
+//   ViTMART — Complete Firestore Security Rules
+//   Version: 3.0  (real-time chat removed)
+//
+//   Collections:
+//     /users                        user profiles
+//     /products                     marketplace listings
+//     /products/{id}/offers         barter/trade offers
+//     /products/{id}/price_offers   price negotiation
+//     /carts/{uid}/items            shopping cart (private)
+//     /orders                       purchase history
+//     /lost_and_found               lost & found reports
+//     /reviews                      campus reviews
+//     /noticeboard                  campus notice board
+//     /noticeboard/{id}/replies     replies on each notice
+//
+//   Deploy: firebase deploy --only firestore:rules
+//   Admin:  Replace REPLACE_WITH_ADMIN_UID_1 with your Firebase Auth UID
+//
+// ═══════════════════════════════════════════════════════════════════════════
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── helpers ──────────────────────────────────────────────────────────
+    function isVerified() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    function isOwner(uid) {
+      return isVerified() && request.auth.uid == uid;
+    }
+    function isAdmin() {
+      return isVerified()
+          && request.auth.uid in ['REPLACE_WITH_ADMIN_UID_1','REPLACE_WITH_ADMIN_UID_2'];
+    }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function notChanging(field) {
+      return !(field in request.resource.data) || request.resource.data[field] == resource.data[field];
+    }
+    function onlyChanging(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+    function validStr(field, mn, mx) {
+      return field in incoming() && incoming()[field] is string
+          && incoming()[field].size() >= mn && incoming()[field].size() <= mx;
+    }
+    function validNum(field, mn, mx) {
+      return field in incoming() && incoming()[field] is number
+          && incoming()[field] >= mn && incoming()[field] <= mx;
+    }
+    function isSeller(productId) {
+      return isVerified()
+          && get(/databases/$(database)/documents/products/$(productId)).data.sellerId == request.auth.uid;
+    }
+
+    // ── /users/{userId} ──────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read:   if isVerified();
+      allow create: if isOwner(userId)
+                    && incoming().keys().hasAll(['uid','displayName','email','createdAt'])
+                    && incoming().uid == userId
+                    && validStr('displayName', 1, 100);
+      allow update: if isOwner(userId)
+                    && notChanging('uid') && notChanging('email') && notChanging('createdAt')
+                    && (!('displayName' in incoming()) || validStr('displayName', 1, 100));
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // ── /products/{productId} ────────────────────────────────────────────
+    match /products/{productId} {
+      allow read: if isVerified();
+      allow create: if isVerified()
+                    && incoming().sellerId == request.auth.uid
+                    && incoming().keys().hasAll(['name','price','description','sellerId','sellerName','status','createdAt'])
+                    && validStr('name', 2, 200) && validStr('description', 10, 2000)
+                    && validNum('price', 1, 1000000)
+                    && incoming().status == 'available';
+      allow update: if isVerified()
+                    && (existing().sellerId == request.auth.uid || isAdmin())
+                    && notChanging('sellerId') && notChanging('createdAt')
+                    && (!('price' in incoming()) || validNum('price', 1, 1000000))
+                    && (!('status' in incoming()) || incoming().status in ['available','sold','traded','pending','removed']);
+      allow delete: if isVerified() && (existing().sellerId == request.auth.uid || isAdmin());
+
+      // barter/trade offers
+      match /offers/{offerId} {
+        allow read:   if isVerified() && (isSeller(productId) || resource.data.offererId == request.auth.uid);
+        allow create: if isVerified()
+                      && incoming().offererId == request.auth.uid
+                      && incoming().status == 'pending'
+                      && validStr('offerText', 5, 1000)
+                      && !isSeller(productId);
+        allow update: if isVerified() && isSeller(productId)
+                      && notChanging('offererId') && notChanging('offerText') && notChanging('createdAt')
+                      && incoming().status in ['accepted','rejected'];
+        allow delete: if isVerified()
+                      && (resource.data.offererId == request.auth.uid || isSeller(productId) || isAdmin());
+      }
+
+      // price negotiation offers
+      match /price_offers/{offerId} {
+        allow read:   if isVerified() && (isSeller(productId) || resource.data.buyerId == request.auth.uid);
+        allow create: if isVerified()
+                      && incoming().buyerId == request.auth.uid
+                      && incoming().status == 'pending'
+                      && validNum('offerPrice', 1, 10000000)
+                      && incoming().originalPrice is number
+                      && !isSeller(productId);
+        allow update: if isVerified() && isSeller(productId)
+                      && notChanging('buyerId') && notChanging('offerPrice')
+                      && notChanging('originalPrice') && notChanging('createdAt')
+                      && incoming().status in ['accepted','rejected','countered'];
+        allow delete: if isVerified()
+                      && (resource.data.buyerId == request.auth.uid || isSeller(productId) || isAdmin());
+      }
+    }
+
+    // ── /carts/{userId}/items/{itemId} ───────────────────────────────────
+    // Strictly private — no admin access by design
+    match /carts/{userId} {
+      allow read, write: if isOwner(userId);
+      match /items/{itemId} { allow read, write: if isOwner(userId); }
+    }
+
+    // ── /orders/{orderId} ────────────────────────────────────────────────
+    match /orders/{orderId} {
+      allow read:   if isVerified() && resource.data.userId == request.auth.uid;
+      allow create: if isVerified()
+                    && incoming().userId == request.auth.uid
+                    && incoming().keys().hasAll(['userId','items','total','createdAt','status'])
+                    && incoming().total is number && incoming().total > 0
+                    && incoming().status == 'placed';
+      allow update: if isAdmin();
+      allow delete: if isVerified() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // ── /lost_and_found/{itemId} ─────────────────────────────────────────
+    match /lost_and_found/{itemId} {
+      allow read:   if isVerified();
+      allow create: if isVerified()
+                    && incoming().reporterId == request.auth.uid
+                    && incoming().keys().hasAll(['title','description','location','reportType','reporterId','createdAt'])
+                    && validStr('title', 3, 150) && validStr('description', 5, 1000)
+                    && validStr('location', 2, 200)
+                    && incoming().reportType in ['lost','found'];
+      allow update: if isVerified()
+                    && (existing().reporterId == request.auth.uid || isAdmin())
+                    && notChanging('reporterId') && notChanging('createdAt') && notChanging('reportType')
+                    && (!('status' in incoming()) || incoming().status in ['active','resolved']);
+      allow delete: if isVerified() && (existing().reporterId == request.auth.uid || isAdmin());
+    }
+
+    // ── /reviews/{reviewId} ──────────────────────────────────────────────
+    // update:false — reviews are permanently immutable (no rating manipulation)
+    match /reviews/{reviewId} {
+      allow read:   if isVerified();
+      allow create: if isVerified()
+                    && incoming().keys().hasAll(['rating','text','subject','authorName','createdAt'])
+                    && incoming().rating is int && incoming().rating >= 1 && incoming().rating <= 5
+                    && validStr('text', 10, 1000) && validStr('subject', 2, 150)
+                    && (incoming().authorId == null || incoming().authorId == request.auth.uid);
+      allow update: if false;
+      allow delete: if isVerified()
+                    && ((resource.data.authorId != null && resource.data.authorId == request.auth.uid)
+                        || isAdmin());
+    }
+
+    // ── /noticeboard/{noticeId} ──────────────────────────────────────────
+    match /noticeboard/{noticeId} {
+      allow read:   if isVerified();
+      allow create: if isVerified()
+                    && incoming().authorId == request.auth.uid
+                    && incoming().keys().hasAll(['tag','title','body','authorId','authorName','createdAt'])
+                    && validStr('title', 3, 100) && validStr('body', 5, 500)
+                    && incoming().tag in ['want-to-buy','selling','help','general'];
+      allow update: if isVerified()
+                    && (existing().authorId == request.auth.uid
+                        || isAdmin()
+                        // Any verified user may increment replyCount when adding a reply
+                        || (onlyChanging(['replyCount']) && incoming().replyCount == existing().replyCount + 1)
+                        // Any verified user may decrement replyCount when deleting a reply
+                        || (onlyChanging(['replyCount']) && incoming().replyCount == existing().replyCount - 1));
+      allow delete: if isVerified() && (existing().authorId == request.auth.uid || isAdmin());
+
+      match /replies/{replyId} {
+        allow read:   if isVerified();
+        allow create: if isVerified()
+                      && incoming().authorId == request.auth.uid
+                      && incoming().keys().hasAll(['text','authorId','authorName','createdAt'])
+                      && validStr('text', 1, 300);
+        allow update: if false;
+        allow delete: if isVerified() && (resource.data.authorId == request.auth.uid || isAdmin());
+      }
+    }
+
+    // ── catch-all: deny everything not explicitly matched ─────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+  }
+}
