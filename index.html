@@ -541,6 +541,7 @@ tailwind.config = {
   .cat-pill { padding:8px 18px; border-radius:99px; border:1.5px solid rgba(139,92,246,0.2); font-weight:600; font-size:0.82rem; transition:all 0.25s; background:rgba(255,255,255,0.7); cursor:pointer; }
   .dark .cat-pill { background:rgba(255,255,255,0.06); }
   .cat-pill:hover, .cat-pill.active { background:linear-gradient(135deg,#7c3aed,#06b6d4); color:white; border-color:transparent; transform:translateY(-2px); box-shadow:0 8px 20px rgba(139,92,246,0.3); }
+  @keyframes reply-in { to { opacity:1; transform:translateY(0); } }
 
   /* ═══ NOTICEBOARD ═══ */
   .notice-card { background:rgba(255,255,255,0.82); border:1px solid rgba(139,92,246,0.13); border-radius:20px; transition:all 0.3s cubic-bezier(0.34,1.2,0.64,1); overflow:hidden; }
@@ -557,8 +558,8 @@ tailwind.config = {
   .dark .tag-general { background:rgba(6,182,212,0.22); color:#67e8f9; }
   .reply-bubble { background:rgba(139,92,246,0.07); border-left:3px solid rgba(139,92,246,0.4); border-radius:0 12px 12px 0; padding:10px 14px; margin-top:8px; }
   .dark .reply-bubble { background:rgba(139,92,246,0.12); }
-  .replies-container { max-height:0; overflow:hidden; transition:max-height 0.4s cubic-bezier(0.4,0,0.2,1); }
-  .replies-container.open { max-height:600px; }
+  .replies-container { max-height:0; overflow:hidden; transition:max-height 0.25s cubic-bezier(0.4,0,0.2,1); }
+  .replies-container.open { max-height:800px; }
   .notice-card .expand-replies-btn { cursor:pointer; transition:color 0.2s; }
 
 
@@ -589,6 +590,27 @@ tailwind.config = {
   .notif-item.unread:hover { background:rgba(139,92,246,0.1); }
   .notif-dot { width:8px; height:8px; background:#7c3aed; border-radius:50%; flex-shrink:0; margin-top:5px; }
   .notif-icon-box { width:36px; height:36px; border-radius:10px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:16px; }
+
+  /* ═══ CHATBOT ENHANCEMENTS ═══ */
+  .quick-chip { display:inline-flex; align-items:center; padding:5px 12px; background:rgba(139,92,246,0.08); border:1px solid rgba(139,92,246,0.2); border-radius:99px; font-size:11px; font-weight:600; color:#7c3aed; cursor:pointer; white-space:nowrap; transition:all 0.18s cubic-bezier(0.34,1.4,0.64,1); user-select:none; }
+  .dark .quick-chip { color:#c4b5fd; background:rgba(139,92,246,0.14); border-color:rgba(139,92,246,0.28); }
+  .quick-chip:hover { background:rgba(139,92,246,0.18); transform:translateY(-2px) scale(1.05); box-shadow:0 4px 14px rgba(139,92,246,0.2); }
+  .quick-chip:active { transform:scale(0.95); }
+  #quick-chips-bar { display:flex; gap:6px; flex-wrap:nowrap; overflow-x:auto; padding:6px 12px 10px; scrollbar-width:none; }
+  #quick-chips-bar::-webkit-scrollbar { display:none; }
+  .chat-divider { text-align:center; font-size:10px; color:#9ca3af; letter-spacing:0.06em; padding:4px 0; font-weight:600; }
+
+  /* ═══ NOTICEBOARD REPLY PANEL ═══ */
+  .replies-panel { border-top:1px solid rgba(139,92,246,0.08); }
+  .reply-input-row { display:flex; gap:8px; align-items:center; padding:10px 16px 14px; }
+  .reply-input-row input { font-size:13px; padding:8px 14px; border-radius:12px; }
+  .reply-submit-btn { flex-shrink:0; width:34px; height:34px; background:linear-gradient(135deg,#7c3aed,#06b6d4); color:white; border:none; border-radius:10px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s cubic-bezier(0.34,1.4,0.64,1); }
+  .reply-submit-btn:hover { transform:scale(1.12); box-shadow:0 4px 14px rgba(139,92,246,0.4); }
+  .reply-submit-btn:active { transform:scale(0.93); }
+  .reply-submit-btn svg { width:16px; height:16px; }
+  .reply-count-chip { display:inline-flex; align-items:center; gap:4px; transition:all 0.2s; }
+  .reply-count-chip.has-replies { color:#7c3aed; }
+  .dark .reply-count-chip.has-replies { color:#a78bfa; }
 </style>
 </head>
 <body class="bg-gray-50 dark:bg-[#0f0a1e] text-gray-800 dark:text-gray-200 transition-colors duration-300" style="cursor:none">
@@ -909,174 +931,355 @@ const campusBot = {
 };
 
 const chatbotIntents = [
-  // --- GREETINGS ---
-  { name: 'greeting', keywords: [/^hey\b/i,/^hello\b/i,/^hi\b/i,/^yo\b/i,/^sup\b/i,/^hii/i,/^helo/i],
-    handler: () => { const n = currentUser ? `, ${currentUser.displayName.split(' ')[0]}` : ''; return `Hello${n}! ⚡ I'm the **ViT Assistant** — I know everything about this marketplace.\n\nTry asking me:\n- "How do I sell an item?"\n- "What is the trade page?"\n- "Find a textbook under ₹500"\n- "How do I contact support?"`; }
+  // ── GREETINGS ────────────────────────────────────────────
+  { name:'greeting',
+    keywords:[/^hey\b/i,/^hello\b/i,/^hi\b/i,/^yo\b/i,/^sup\b/i,/^hii/i,/^namaste/i,/^wassup/i,/^howdy/i],
+    handler:()=>{ const n=currentUser?`, ${currentUser.displayName.split(' ')[0]}`:''; return `Hello${n}! ⚡ I'm **ViT Assistant** — your campus marketplace guide.\n\n💡 **Quick questions to try:**\n- "How do I sell something?"\n- "Find a laptop under ₹8000"\n- "What is the noticeboard?"\n- "How do price offers work?"\n- "Show me trending items"\n- "What are my orders?"\n\nOr just type naturally!`; }
   },
 
-  // --- ABOUT VITMART ---
-  { name: 'about_vitmart', keywords: [/what is vitmart/i,/what is this (site|app|platform|website)/i,/tell me about vitmart/i,/about (this|vitmart)/i,/what does vitmart do/i,/how does vitmart work/i],
-    handler: () => `**ViTMART** is a student-exclusive campus marketplace where you can:\n\n🛒 **Buy** used items from fellow students\n💰 **Sell** things you no longer need\n🔄 **Trade** items without spending cash\n🔍 Report & find **Lost & Found** items\n\nAll transactions happen in person on campus — no shipping, no strangers, no fees!`
+  // ── ABOUT ────────────────────────────────────────────────
+  { name:'about',
+    keywords:[/what is vitmart/i,/about vitmart/i,/tell me about/i,/how does vitmart work/i,/what does vitmart do/i,/what is this (site|app|platform)/i],
+    handler:()=>`**ViTMART** is a student-exclusive campus marketplace.\n\n🛒 **Buy** used items from fellow students\n💰 **Sell** things you no longer need\n🔄 **Trade/Barter** — swap items, no money needed\n📌 **Noticeboard** — post what you want or need\n🔍 **Lost & Found** — campus bulletin board\n⭐ **Reviews** — rate your experience\n✨ **Recommendations** — personalised picks for you\n\nAll transactions happen **in person on campus** — no shipping, no fees!`
   },
 
-  // --- NAVIGATION ---
-  { name: 'navigate', keywords: [/take me to/i,/go to/i,/^open /i,/navigate to/i,/show me the/i,/switch to/i],
-    handler: (msg) => {
-      const m = msg.toLowerCase();
-      if (m.includes('home')) { setActiveTab('home'); closeChatUI(); return '🏠 Taking you **Home**!'; }
-      if (m.includes('buy') || m.includes('shop') || m.includes('browse') || m.includes('marketplace')) { setActiveTab('buy'); closeChatUI(); return '🛒 Opening the **Buy** page!'; }
-      if (m.includes('sell') || m.includes('list')) { setActiveTab('sell'); closeChatUI(); return '💰 Opening the **Sell** page!'; }
-      if (m.includes('trade') || m.includes('barter') || m.includes('swap')) { setActiveTab('trade'); closeChatUI(); return '🔄 Opening **Trade/Barter**!'; }
-      if (m.includes('lost') || m.includes('found')) { setActiveTab('lost-and-found'); closeChatUI(); return '🔍 Opening **Lost & Found**!'; }
-      if (m.includes('my listing') || m.includes('my items') || m.includes('my product')) { if(!currentUser) return "Please **sign in** first to view your listings."; setActiveTab('my-listings'); closeChatUI(); return '📋 Opening **My Listings**!'; }
-      if (m.includes('order') || m.includes('purchase') || m.includes('bought')) { if(!currentUser) return "Please **sign in** first to view your orders."; setActiveTab('orders'); closeChatUI(); return '📦 Opening **My Orders**!'; }
-      if (m.includes('profile') || m.includes('account') || m.includes('settings')) { if(!currentUser) return "Please **sign in** first to access your profile."; setActiveTab('profile'); closeChatUI(); return '👤 Opening your **Profile**!'; }
-      return "I can navigate to: **Home, Buy, Sell, Trade, Lost & Found, My Listings, Orders, Profile**.\nWhere would you like to go?";
+  // ── NAVIGATION ───────────────────────────────────────────
+  { name:'navigate',
+    keywords:[/take me to/i,/go to/i,/^open /i,/navigate to/i,/show me the/i,/switch to/i,/i want to (see|visit)/i],
+    handler:(msg)=>{
+      const m=msg.toLowerCase();
+      const routes=[
+        {words:['home','main page'],tab:'home',label:'🏠 **Home**'},
+        {words:['buy','shop','browse','marketplace','store'],tab:'buy',label:'🛒 **Buy**'},
+        {words:['sell','list','create listing'],tab:'sell',label:'💰 **Sell**'},
+        {words:['trade','barter','swap','exchange'],tab:'trade',label:'🔄 **Trade**'},
+        {words:['lost','found','l&f'],tab:'lost-and-found',label:'🔍 **Lost & Found**'},
+        {words:['my listing','my items','my product'],tab:'my-listings',label:'📋 **My Listings**',auth:true},
+        {words:['order','purchase','bought'],tab:'orders',label:'📦 **My Orders**',auth:true},
+        {words:['profile','account','settings'],tab:'profile',label:'👤 **Profile**',auth:true},
+        {words:['review','rating'],tab:'reviews',label:'⭐ **Reviews**'},
+        {words:['noticeboard','board','notice','bulletin'],tab:'noticeboard',label:'📌 **Noticeboard**'},
+        {words:['manage','cleanup','delete history'],tab:'manage',label:'🗑️ **Manage**'},
+      ];
+      for(const r of routes){
+        if(r.words.some(w=>m.includes(w))){
+          if(r.auth&&!currentUser) return `Please **sign in** first to access ${r.label}.`;
+          setActiveTab(r.tab); closeChatUI();
+          return `Opening ${r.label} for you! ✨`;
+        }
+      }
+      return `I can take you to:\n**Home · Buy · Sell · Trade · Lost & Found**\n**My Listings · My Orders · Profile · Reviews**\n**Noticeboard · Manage**\n\nWhere would you like to go?`;
     }
   },
 
-  // --- HOW TO SELL ---
-  { name: 'how_to_sell', keywords: [/how (do|can|to) (i |we )?sell/i,/how (do|can|to) (i |we )?list/i,/list an item/i,/post an item/i,/create a listing/i,/how (do|can|to) (i |we )?add (a |an )?product/i,/sell page/i,/listing process/i],
-    handler: () => { setActiveTab('sell'); closeChatUI(); return `To **list an item** for sale:\n\n1️⃣ Go to the **Sell** page (just opened!)\n2️⃣ Upload a clear photo of your item\n3️⃣ Fill in the name, description & price\n4️⃣ Pick a category (Books, Electronics, etc.)\n5️⃣ Check ✅ "Accept Trade Offers" if you're open to bartering\n6️⃣ Hit **List My Item** ⚡\n\nYour listing goes live instantly and appears in Buy & My Listings!`; }
+  // ── SELL ─────────────────────────────────────────────────
+  { name:'how_to_sell',
+    keywords:[/how (do|can|to) (i |we )?sell/i,/how (do|can|to) (i |we )?list/i,/list an item/i,/post an item/i,/create a listing/i,/sell page/i,/listing process/i,/start selling/i],
+    handler:()=>{ setActiveTab('sell'); closeChatUI(); return `To **list an item** for sale:\n\n1️⃣ Upload a clear photo\n2️⃣ Fill in name, description & price\n3️⃣ Pick a category\n4️⃣ Set a price — or enable **🤝 Price Offers** so buyers can negotiate\n5️⃣ Check ✅ **Accept Trade Offers** to allow barter\n6️⃣ Hit **⚡ List My Item**\n\n✅ Goes live instantly in Buy & My Listings!\n\n💡 **Tip:** Clear photos & honest descriptions = faster sales.`; }
   },
 
-  // --- HOW TO BUY ---
-  { name: 'how_to_buy', keywords: [/how (do|can|to) (i |we )?buy/i,/how (do|can|to) (i |we )?purchase/i,/how (do|can|to) (i |we )?order/i,/buying process/i,/buy page/i,/add to cart/i,/checkout/i],
-    handler: () => { setActiveTab('buy'); closeChatUI(); return `To **buy an item**:\n\n1️⃣ Go to the **Buy** page (opened it!)\n2️⃣ Search or filter by category & price\n3️⃣ Click any item to see full details\n4️⃣ Click **Add to Cart** 🛒\n5️⃣ Open the cart (top-right icon) → **Proceed to Checkout**\n6️⃣ Complete the payment flow\n\nAfterward, **contact the seller** from your Orders page to arrange a campus meetup!`; }
+  // ── BUY ──────────────────────────────────────────────────
+  { name:'how_to_buy',
+    keywords:[/how (do|can|to) (i |we )?buy/i,/how (do|can|to) (i |we )?purchase/i,/buying process/i,/add to cart/i,/checkout process/i,/how to checkout/i],
+    handler:()=>{ setActiveTab('buy'); closeChatUI(); return `To **buy an item**:\n\n1️⃣ Browse the Buy page (opened!)\n2️⃣ Use **filters** — category, price range, sort\n3️⃣ Click any item for full details\n4️⃣ **Add to Cart** 🛒 or **Make a Price Offer** 🤝\n5️⃣ Open cart (top-right) → **Checkout**\n6️⃣ Contact seller from **My Orders** to arrange meetup\n\n💡 **Price Offers** let you negotiate — the seller can accept, counter, or decline!`; }
   },
 
-  // --- HOW TO TRADE ---
-  { name: 'how_to_trade', keywords: [/how (do|can|to) (i |we )?trade/i,/how (do|can|to) (i |we )?barter/i,/how (do|can|to) (i |we )?swap/i,/what is (the )?trade/i,/what is (the )?barter/i,/trade page/i,/barter page/i,/make (a |an )?offer/i,/trade offer/i],
-    handler: () => { setActiveTab('trade'); closeChatUI(); return `**Trading on ViTMART** lets you exchange items without cash:\n\n🔄 Browse **Trade/Barter** (just opened!)\n— Only items marked "🔄 Tradeable" appear here\n\n1️⃣ Click any tradeable item → **Make a Trade Offer**\n2️⃣ Describe what you're offering + optional photo\n3️⃣ Submit — the seller reviews your offer\n✅ If accepted, both arrange a campus meetup!\n\n💡 To make your listing tradeable — check ✅ the trade option on the Sell page.`; }
+  // ── TRADE ────────────────────────────────────────────────
+  { name:'how_to_trade',
+    keywords:[/how (do|can|to) (i |we )?trade/i,/how (do|can|to) (i |we )?barter/i,/trade offer/i,/what is (the )?trade/i,/trade page/i,/barter page/i,/make (a )?trade offer/i,/swap items/i],
+    handler:()=>{ setActiveTab('trade'); closeChatUI(); return `**Trading on ViTMART** — swap items without cash:\n\n1️⃣ Browse **Trade** page (opened!) — only 🔄 Tradeable items show here\n2️⃣ Click any item → **Make a Trade Offer**\n3️⃣ Describe what you're offering + optional photo\n4️⃣ Seller sees your offer on their listing\n✅ If accepted, arrange a campus meetup!\n\n💡 To make **your listing tradeable** — check ✅ "Accept Trade Offers" on the Sell page.\n\n📦 Accepted trades appear in your **My Orders** tab too!`; }
   },
 
-  // --- LOST AND FOUND ---
-  { name: 'lost_found', keywords: [/lost.found/i,/lost and found/i,/lost (my |an |a )?item/i,/found (an |a )?item/i,/report lost/i,/report found/i,/lost my/i,/found a/i,/l&f/i],
-    handler: () => { setActiveTab('lost-and-found'); closeChatUI(); return `**Lost & Found** is a campus bulletin board (just opened!):\n\n😢 **Lost something?**\n→ Click "Report Lost"\n→ Add photo, description & last known location\n\n🎉 **Found something?**\n→ Click "Report Found"\n→ Add where you found it & a pickup point\n\nOther students contact you via email. Mark as **Resolved** once done!`; }
+  // ── PRICE OFFERS / NEGOTIATION ───────────────────────────
+  { name:'price_offer',
+    keywords:[/price offer/i,/make (a |an )?offer/i,/negotiate/i,/counter offer/i,/haggle/i,/bargain/i,/offer (a )?price/i,/can i negotiate/i,/can i bargain/i],
+    handler:()=>`**Price Negotiation on ViTMART:**\n\n🤝 On any product detail page, click **"Make a Price Offer"** to propose your own price.\n\n**How it works:**\n1️⃣ Buyer sends an offer with optional message\n2️⃣ Seller sees it in the **Price Offers Received** section\n3️⃣ Seller can:\n   ✅ **Accept** — deal confirmed!\n   💬 **Counter** — suggest a different price\n   ❌ **Decline** — offer rejected\n4️⃣ If countered, buyer can accept or decline the counter\n\n💡 **Counter offers never change the public listing price** — only you and the seller see the negotiation.`
   },
 
-  // --- MY LISTINGS ---
-  { name: 'my_listings', keywords: [/my listing/i,/my items/i,/items (i.m|i am) selling/i,/what am i selling/i,/my product/i,/view my listing/i,/items i.ve listed/i],
-    handler: () => {
-      if (!currentUser) return "You need to be **signed in** to view your listings. Click **Sign In** at the top!";
-      const ml = products.filter(p => p.sellerId === currentUser.uid);
-      const av = ml.filter(p => p.status==='available').length;
-      const sold = ml.filter(p => p.status==='sold').length;
-      const traded = ml.filter(p => p.status==='traded').length;
+  // ── NOTICEBOARD ──────────────────────────────────────────
+  { name:'noticeboard',
+    keywords:[/noticeboard/i,/notice board/i,/what is the board/i,/bulletin board/i,/post a request/i,/looking for something/i,/want to buy/i,/wanna buy/i,/notice/i,/board/i,/community post/i],
+    handler:()=>{ setActiveTab('noticeboard'); closeChatUI(); return `**📌 Noticeboard** — the campus bulletin board (opened!):\n\n**Post 4 types of notices:**\n🛒 **Want to Buy** — "Looking for a Python textbook"\n💰 **Selling** — "Selling my semester notes"\n🙋 **Need Help** — "Need someone to tutor DSA"\n📢 **General** — Anything else!\n\n**Anyone can reply** to your notice in real-time.\nGreat for finding specific items that aren't listed yet!`; }
+  },
+
+  // ── NOTIFICATIONS ────────────────────────────────────────
+  { name:'notifications',
+    keywords:[/notification/i,/bell/i,/alert/i,/how do i know/i,/will i be notified/i,/get notified/i,/notification system/i],
+    handler:()=>`**🔔 Notifications on ViTMART:**\n\nThe bell icon 🔔 in the top header shows real-time alerts for:\n\n🛒 **Purchase** — someone bought your item\n🔄 **Trade offer** — someone sent you a trade offer\n💰 **Price offer** — someone offered a price on your item\n✅ **Trade accepted** — your trade offer was accepted\n\n**Click any notification** to jump straight to the relevant item.\n\n✉️ Unread count shows as a red badge on the bell. Click **"Mark all read"** to clear.`
+  },
+
+  // ── RECOMMENDATIONS ──────────────────────────────────────
+  { name:'recommendations',
+    keywords:[/recommendation/i,/personalised/i,/for me/i,/suggest/i,/what should i buy/i,/trending/i,/popular/i,/what.s good/i,/any suggestions/i],
+    handler:()=>{
+      const hist=JSON.parse(localStorage.getItem('vm_rec_events')||'[]');
+      if(!hist.length) return `**✨ Personalised Recommendations:**\n\nStart browsing, wishlisting, or buying items — the more you interact, the better your recommendations get!\n\nRecommendations appear on the **Buy page** and **Home page** and are based on:\n📂 Category preferences\n💰 Your price range\n🔍 Keywords you search\n❤️ Items you wishlist\n🛒 Things you buy\n\nThey update every time you interact with the site!`;
+      const recs=getRecommendations(3);
+      const recText=recs.length ? recs.map(p=>`• **${p.name}** — ₹${p.price?.toFixed(0)||'?'} (${p.category})`).join('\n') : 'No new recommendations right now.';
+      return `**✨ Your Top Picks right now:**\n\n${recText}\n\nSee all recommendations on the **Buy page** → scroll down for "Recommended For You"!`;
+    }
+  },
+
+  // ── LOST & FOUND ─────────────────────────────────────────
+  { name:'lost_found',
+    keywords:[/lost.?found/i,/lost (my |an |a )?item/i,/found (an |a )?item/i,/report lost/i,/report found/i,/lost my/i,/i found/i,/l&f/i,/missing item/i],
+    handler:()=>{ setActiveTab('lost-and-found'); closeChatUI(); return `**🔍 Lost & Found** (opened!):\n\n😢 **Lost something?**\n→ "Report Lost" → add photo, description & last seen location\n→ Students contact you via email if they find it\n\n🎉 **Found something?**\n→ "Report Found" → add where you found it & collection point\n→ Owner contacts you to claim it\n\n✅ Mark as **Resolved** once the item is returned!`; }
+  },
+
+  // ── REVIEWS ──────────────────────────────────────────────
+  { name:'reviews',
+    keywords:[/review/i,/rating/i,/rate (a |the )?seller/i,/write (a )?review/i,/leave (a )?feedback/i,/feedback/i,/star/i],
+    handler:()=>{ setActiveTab('reviews'); closeChatUI(); return `**⭐ Reviews** (opened!):\n\nShare honest feedback about sellers, items, or the platform.\n\n**How to post a review:**\n1️⃣ Pick a rating (1–5 stars)\n2️⃣ Enter what it's about (seller name, item, etc.)\n3️⃣ Write your experience\n4️⃣ Optional: post **anonymously**\n\n**Deleting:** You can delete your own reviews.\n\n💡 Reviews are **immutable** — you can't edit once posted, only delete.`; }
+  },
+
+  // ── MY LISTINGS ──────────────────────────────────────────
+  { name:'my_listings',
+    keywords:[/my listing/i,/my items/i,/items (i.m|i am) selling/i,/what am i selling/i,/my product/i,/view my listing/i,/items i.ve listed/i,/how many (items|listings)/i],
+    handler:()=>{
+      if(!currentUser) return "You need to be **signed in** to view your listings.";
+      const ml=products.filter(p=>p.sellerId===currentUser.uid);
+      const av=ml.filter(p=>p.status==='available').length;
+      const sold=ml.filter(p=>p.status==='sold').length;
+      const traded=ml.filter(p=>p.status==='traded').length;
       setActiveTab('my-listings'); closeChatUI();
-      if (ml.length === 0) return "You haven't listed anything yet! Head to **Sell** to create your first listing. 🚀";
-      return `Your listings:\n✅ **${av}** active\n💰 **${sold}** sold\n🔄 **${traded}** traded\n\nOpened **My Listings** for you!`;
+      if(!ml.length) return "You haven't listed anything yet!\n\nHead to **Sell** to create your first listing. 🚀";
+      return `Your listings summary:\n✅ **${av}** active\n💰 **${sold}** sold\n🔄 **${traded}** traded\n📦 **${ml.length}** total\n\nOpening **My Listings**!`;
     }
   },
 
-  // --- MY ORDERS ---
-  { name: 'my_orders', keywords: [/my order/i,/order history/i,/my purchase/i,/what (i.ve|have i) bought/i,/past order/i,/previous order/i],
-    handler: () => {
-      if (!currentUser) return "Please **sign in** to view your orders.";
+  // ── MY ORDERS ────────────────────────────────────────────
+  { name:'my_orders',
+    keywords:[/my order/i,/order history/i,/my purchase/i,/what (i.ve|have i) bought/i,/past order/i,/previous order/i,/order (list|tab)/i,/placed order/i],
+    handler:()=>{
+      if(!currentUser) return "Please **sign in** to view your orders.";
       setActiveTab('orders'); closeChatUI();
-      if (orders.length === 0) return "No orders yet — Opening **Buy** page! Go find something great. 🛒";
-      return `You have **${orders.length}** order(s) in history. Opening **My Orders**!`;
+      if(!orders.length) return "No orders yet!\n\nHead to **Buy** to find something great. 🛒\nOpened the Buy page for you!";
+      return `You have **${orders.length}** order(s).\n\nOpening **My Orders** — you can also contact sellers directly from there!`;
     }
   },
 
-  // --- SEARCH ITEMS ---
-  { name: 'search', keywords: [/^find /i,/^search /i,/^look for /i,/^do you have /i,/^is there /i,/^show (me )?items/i,/^any /i],
-    handler: (msg) => {
-      const priceMatch = msg.match(/(under|below|less than|over|above|more than) (?:rs\.?|₹|inr)?(\d+)/i);
-      let query = msg.replace(/^(find|search for|search|look for|do you have|is there|any|show me items for|show items)\s+(a|an|any|some)?\s*/i,'').trim();
-      if (priceMatch) query = query.replace(priceMatch[0],'').trim();
-      if (!query || query.length < 2) return "What item are you looking for?\n\nExample: **find a physics textbook** or **search laptop under ₹15000**";
+  // ── SEARCH ───────────────────────────────────────────────
+  { name:'search',
+    keywords:[/^find /i,/^search /i,/^look for /i,/^do you have /i,/^is there /i,/^show (me )?items/i,/^any /i,/^looking for /i,/^i need a /i,/^i want a /i],
+    handler:(msg)=>{
+      const priceMatch=msg.match(/(under|below|less than|over|above|more than)\s*(?:rs\.?|₹|inr)?\s*(\d+)/i);
+      let query=msg.replace(/^(find|search for|search|look for|do you have|is there|any|show me items for|show items|looking for|i need a|i need an|i want a|i want an)\s+(a|an|any|some)?\s*/i,'').trim();
+      if(priceMatch) query=query.replace(priceMatch[0],'').trim();
+      if(!query||query.length<2) return "What are you looking for?\n\nExample: **find a physics textbook** or **search laptop under ₹15000**";
       setActiveTab('buy');
-      setTimeout(() => {
-        const s = document.querySelector('#buy-tab #search-input');
-        if (s) { s.value = query; s.dispatchEvent(new Event('input')); }
-        if (priceMatch) {
-          const pf = document.querySelector('#buy-tab #filter-price');
-          const cond = priceMatch[1].toLowerCase(); const amt = parseInt(priceMatch[2]);
-          if (pf) {
-            if (['under','below','less than'].includes(cond)) {
-              if (amt <= 500) pf.value='0-500';
-              else if (amt <= 2000) pf.value='500-2000';
-              else if (amt <= 5000) pf.value='2000-5000';
+      setTimeout(()=>{
+        const s=document.querySelector('#buy-tab #search-input');
+        if(s){s.value=query;s.dispatchEvent(new Event('input'));}
+        if(priceMatch){
+          const pf=document.querySelector('#buy-tab #filter-price');
+          const cond=priceMatch[1].toLowerCase();const amt=parseInt(priceMatch[2]);
+          if(pf){
+            if(['under','below','less than'].includes(cond)){
+              if(amt<=500)pf.value='0-500';
+              else if(amt<=2000)pf.value='500-2000';
+              else if(amt<=5000)pf.value='2000-5000';
               else pf.value='all';
-            } else { pf.value='5000-9999999'; }
+            }else{pf.value='5000-9999999';}
             pf.dispatchEvent(new Event('change'));
           }
         }
-      }, 150);
+      },150);
       closeChatUI();
       return `🔍 Searching for **"${query}"**...`;
     }
   },
 
-  // --- CATEGORIES ---
-  { name: 'categories', keywords: [/what categor/i,/what type(s)? of item/i,/what can i (buy|find|sell|get)/i,/types of item/i,/category list/i,/available categor/i],
-    handler: () => `**ViTMART Categories:**\n\n📚 Books  💻 Electronics  🛋️ Furniture\n👕 Clothing  ✏️ Stationery  ⚽ Sports Gear\n🤝 Services  🎟️ Event Tickets  📦 Other\n\nUse the **category filter** on the Buy/Trade pages to browse by type!`
+  // ── CATEGORIES ───────────────────────────────────────────
+  { name:'categories',
+    keywords:[/what categor/i,/what type(s)? of item/i,/what can i (buy|find|sell|get)/i,/types of item/i,/category list/i,/available categor/i,/what.s (available|on sale)/i],
+    handler:()=>`**ViTMART Categories:**\n\n📚 Books  💻 Electronics  🛋️ Furniture\n👕 Clothing  ✏️ Stationery  ⚽ Sports Gear\n🤝 Services  🎟️ Event Tickets  📦 Other\n\nUse **category + price filters** on the Buy/Trade pages.\nOr ask me: **"find Electronics under ₹5000"** and I'll search for you!`
   },
 
-  // --- PAYMENT ---
-  { name: 'payment', keywords: [/how (do|can) (i |we )?pay/i,/payment/i,/upi/i,/how (does|do) payment/i,/how to pay/i,/payment method/i,/pay for/i,/money/i],
-    handler: () => `**Payments on ViTMART:**\n\n💳 The checkout shows UPI & card inputs *(currently simulated — no real money is charged)*\n\n💵 **Real payment** happens in-person when you meet the seller on campus — cash, UPI, Google Pay, whatever you both agree on.\n\nViTMART facilitates the connection; the final transaction is between you and the other student.`
+  // ── EDIT PRICE ───────────────────────────────────────────
+  { name:'edit_price',
+    keywords:[/edit price/i,/change price/i,/update price/i,/change (my )?listing price/i,/how (to|do i) change.*price/i,/lower (the )?price/i,/reduce price/i],
+    handler:()=>{ if(!currentUser) return "Please **sign in** to edit your listings."; setActiveTab('my-listings'); closeChatUI(); return `To **change a listing price**:\n\n1️⃣ Go to **My Listings** (opened!) or the product detail page\n2️⃣ Click the **✏️ Edit Price** button below the price\n3️⃣ Enter the new price — a live preview shows the % change\n4️⃣ Confirm\n\n✅ Price updates instantly for all buyers!\n\n💡 The edit price button is for **your own listings only** — counter offers let you negotiate prices with individual buyers.`; }
   },
 
-  // --- SAFETY ---
-  { name: 'safety', keywords: [/safe/i,/scam/i,/fraud/i,/legit/i,/is it safe/i,/how (to stay|to be) safe/i,/trust/i],
-    handler: () => `**Staying safe on ViTMART:**\n\n🏫 Meet **on campus** — library lobby, student union, cafeteria\n👥 Bring a friend if uncertain\n📱 Verify the seller profile before meeting\n🚫 Never pay before seeing the item in person\n📧 All contact goes through verified student emails\n\n✅ ViTMART is exclusively for verified students — not open to the general public.`
+  // ── MANAGE / CLEANUP ─────────────────────────────────────
+  { name:'manage',
+    keywords:[/manage/i,/cleanup/i,/delete (old|my) listing/i,/clear (order )?history/i,/delete history/i,/how (to|do i) delete.*history/i,/remove old/i],
+    handler:()=>{ if(!currentUser) return "Please **sign in** to manage your data."; setActiveTab('manage'); closeChatUI(); return `**🗑️ Manage & Cleanup** (opened!):\n\nFrom here you can:\n📦 **Bulk-delete** old sold/traded listings\n🧾 **Clear order history**\n❤️ **Manage wishlist** — remove individual items or wipe all\n🔍 **Clear browse history** (resets recommendations)\n⚠️ **Danger Zone** — delete all listings or all local data\n\nAll destructive actions ask for confirmation first.`; }
   },
 
-  // --- DELETE LISTING ---
-  { name: 'delete_listing', keywords: [/delete (my |a |an )?listing/i,/remove (my |a |an )?listing/i,/delete (my |a |an )?item/i,/how to delete/i,/remove item/i,/delist/i],
-    handler: () => { setActiveTab('my-listings'); closeChatUI(); return `To **delete a listing**:\n\n1️⃣ Go to **My Listings** (just opened!)\n2️⃣ Find the item card\n3️⃣ Click the 🗑️ **trash icon**\n4️⃣ Confirm deletion in the popup\n\n⚠️ Deleted listings cannot be recovered. Sold/Traded items can't be deleted.`; }
+  // ── PAYMENT ──────────────────────────────────────────────
+  { name:'payment',
+    keywords:[/how (do|can) (i |we )?pay/i,/payment/i,/upi/i,/how (does|do) payment/i,/payment method/i,/pay for/i,/how to pay/i,/cash/i,/google pay/i,/gpay/i,/phonepay/i,/paytm/i],
+    handler:()=>`**Payments on ViTMART:**\n\n💳 The checkout shows UPI & card fields *(currently simulated — no real charge)*\n\n💵 **Real payment** happens in person when you meet the seller:\n— Cash, UPI, GPay, PhonePay, Paytm — whatever you both agree on\n\n🤝 ViTMART connects you; the final payment is between you two.\n\n💡 **Pro tip:** Confirm the meetup location and payment method via email before meeting!`
   },
 
-  // --- ACCOUNT / PROFILE ---
-  { name: 'account_settings', keywords: [/change password/i,/update (my )?name/i,/change (my )?(name|email|photo|picture|avatar|profile)/i,/update profile/i,/edit profile/i,/account setting/i,/profile setting/i],
-    handler: () => { if(!currentUser) return "Please **sign in** to access account settings."; setActiveTab('profile'); closeChatUI(); return `You can manage your account from **Profile** (just opened!):\n\n👤 Change **display name**\n🖼️ Update **profile picture** / pick an avatar\n🔑 Change **password** (Security section)\n\nAll changes save instantly.`; }
+  // ── SAFETY ───────────────────────────────────────────────
+  { name:'safety',
+    keywords:[/safe/i,/scam/i,/fraud/i,/is it safe/i,/how (to stay|to be) safe/i,/trust/i,/fake/i,/suspicious/i,/report (a )?user/i,/block (a )?user/i],
+    handler:()=>`**Staying safe on ViTMART:**\n\n🏫 Meet **on campus** — library, student union, cafeteria\n👥 Bring a friend if uncertain\n📱 Check the seller's profile — reviews & transaction history\n🚫 **Never pay before seeing the item in person**\n📧 All contact goes via verified student emails\n✅ ViTMART is exclusive to verified VIT students only\n\n⚠️ If you suspect fraud, email: **swastiksinha001@gmail.com**`
   },
 
-  // --- EMAIL VERIFICATION ---
-  { name: 'verification', keywords: [/verif/i,/email (not )?verif/i,/didn.t get (the )?email/i,/resend (the )?email/i,/verification link/i,/verify (my )?email/i],
-    handler: () => `**Email verification help:**\n\n1️⃣ Check your **spam / junk** folder first\n2️⃣ On the verification screen, click **"Resend Email"**\n3️⃣ Wait a few minutes, then click the link in the email\n\n✅ The page **auto-detects** when you've verified — no need to refresh manually. You'll be logged in automatically!`
+  // ── WISHLIST ─────────────────────────────────────────────
+  { name:'wishlist',
+    keywords:[/wishlist/i,/save (an |the )?item/i,/saved item/i,/favorit/i,/favourit/i,/heart (icon|button)/i,/bookmark/i,/how (to|do i) save/i],
+    handler:()=>{
+      const wl=JSON.parse(localStorage.getItem('vitmart_wishlist')||'[]');
+      const count=wl.length;
+      return `**❤️ Wishlist:**\n\nClick the heart ❤️ on any product card to save it.\n\n${count>0?`You currently have **${count} item(s)** wishlisted.`:'Your wishlist is empty right now.'}\n\n💡 **Tips:**\n— Wishlisted items boost your recommendations\n— Manage your wishlist in **🗑️ Manage** tab\n— Saved items persist even after closing the browser`;
+    }
   },
 
-  // --- DARK MODE ---
-  { name: 'dark_mode', keywords: [/dark mode/i,/light mode/i,/toggle (theme|mode|dark|light)/i,/switch (to )?(dark|light)/i,/change theme/i,/night mode/i],
-    handler: () => { toggleTheme(); return `Switched to **${document.documentElement.classList.contains('dark')?'Dark 🌙':'Light ☀️'} Mode**!\n\nYou can also click the **moon/sun icon** in the top-right header to toggle anytime.`; }
+  // ── ACCOUNT ──────────────────────────────────────────────
+  { name:'account_settings',
+    keywords:[/change password/i,/update (my )?name/i,/change (my )?(name|email|photo|picture|avatar|profile)/i,/update profile/i,/edit profile/i,/account setting/i,/profile setting/i,/how (to|do i) change.*name/i],
+    handler:()=>{ if(!currentUser) return "Please **sign in** to access account settings."; setActiveTab('profile'); closeChatUI(); return `**👤 Your Profile** (opened!):\n\nYou can:\n✏️ Change your **display name**\n🖼️ Update **profile picture** or pick an avatar\n🔑 Change **password** (Security section)\n📧 Your email: ${currentUser.email}\n\n💡 All changes sync instantly — your name updates on all your listings too!`; }
   },
 
-  // --- COMMAND PALETTE ---
-  { name: 'search_palette', keywords: [/command palette/i,/quick search/i,/keyboard shortcut/i,/ctrl.?k/i,/cmd.?k/i,/⌘k/i,/how (to|do i) search quickly/i],
-    handler: () => `**Quick Search (Command Palette):**\n\nPress **⌘K** (Mac) or **Ctrl+K** (Windows) anywhere to open the command palette.\n\nFrom there you can:\n🔎 Search any page or product\n⚡ Run quick actions\n🌙 Toggle dark mode\n...all without using your mouse!`
+  // ── DARK MODE ────────────────────────────────────────────
+  { name:'dark_mode',
+    keywords:[/dark mode/i,/light mode/i,/toggle (theme|mode|dark|light)/i,/switch (to )?(dark|light)/i,/change theme/i,/night mode/i,/enable dark/i,/disable dark/i],
+    handler:()=>{ toggleTheme(); return `Switched to **${document.documentElement.classList.contains('dark')?'Dark 🌙':'Light ☀️'} Mode**!\n\nYou can also click the **moon/sun icon** in the header anytime to toggle.`; }
   },
 
-  // --- WISHLIST ---
-  { name: 'wishlist', keywords: [/wishlist/i,/save (an |the )?item/i,/saved item/i,/favorit/i,/favourit/i,/heart (icon|button)/i,/bookmark/i],
-    handler: () => `**Wishlist:**\n\nClick the ❤️ **heart icon** on any product card to save it.\n\n💾 Saved to your browser's local storage (persists after closing the tab)\n❌ Click the heart again to remove\n\nWishlisted items show a red heart — easy to spot!`
+  // ── VERIFICATION ─────────────────────────────────────────
+  { name:'verification',
+    keywords:[/verif/i,/email (not )?verif/i,/didn.t get (the )?email/i,/resend (the )?email/i,/verification link/i,/verify (my )?email/i,/no email/i,/email not coming/i],
+    handler:()=>`**Email verification help:**\n\n1️⃣ Check your **spam / junk** folder first\n2️⃣ On the verification screen, click **"Resend Email"**\n3️⃣ Wait 1–2 minutes, then click the link\n\n✅ The page **auto-detects** when you've verified — no refresh needed!\n\n💡 If still stuck, try signing in again — it will re-show the verification screen.`
   },
 
-  // --- CONTACT / SELLER ---
-  { name: 'contact_seller', keywords: [/contact (the )?seller/i,/how (do|to) (i |we )?contact/i,/reach (the )?seller/i,/talk to seller/i,/message (the )?seller/i],
-    handler: () => `**Contacting a seller:**\n\n📦 After placing an order, go to **My Orders**\n→ Click **"Contact Seller"** next to the item\n→ This opens a pre-filled email to the seller\n\nAlternatively, sellers list their campus email on their profile — you can arrange the meetup details directly.`
+  // ── SUPPORT ──────────────────────────────────────────────
+  { name:'support',
+    keywords:[/contact support/i,/help desk/i,/email support/i,/report a problem/i,/issue/i,/bug/i,/problem with (the )?site/i,/something (is )?broken/i,/admin/i,/contact (the )?admin/i,/how (to|do i) report/i],
+    handler:()=>`**📧 Support:**\n\nEmail the admin: **swastiksinha001@gmail.com**\n\nDescribe your issue clearly — include your registered email and what happened.\n\nResponse within **24 hours** on weekdays.\n\nYou can also click **"Contact Support"** in the footer.`
   },
 
-  // --- SUPPORT ---
-  { name: 'support', keywords: [/contact support/i,/help desk/i,/reach out/i,/email support/i,/report a problem/i,/issue/i,/bug/i,/problem with (the )?site/i,/something (is )?broken/i],
-    handler: () => `**Support:**\n\n📧 Email the admin: **swastiksinha001@gmail.com**\n\nDescribe your issue clearly — include your registered email and what happened. Response within 24 hours.\n\nYou can also click **"Contact Support"** in the footer.`
+  // ── KEYBOARD SHORTCUTS ───────────────────────────────────
+  { name:'shortcuts',
+    keywords:[/keyboard shortcut/i,/command palette/i,/ctrl.?k/i,/cmd.?k/i,/quick (search|access)/i,/shortcut/i,/⌘k/i],
+    handler:()=>`**⌨️ Keyboard Shortcuts:**\n\n**⌘K / Ctrl+K** — Open command palette\n— Search any page, product, or action\n— Navigate without using the mouse\n\n**ESC** — Close any modal or palette\n**↑ ↓** — Navigate palette results\n**↵** — Select highlighted item\n\nThe command palette also shows your recent products!`
   },
 
-  // --- GENERAL HELP ---
-  { name: 'help', keywords: [/^help$/i,/what can you (do|help with)/i,/commands/i,/options/i,/features/i,/what do you know/i,/what questions/i],
-    handler: () => `I'm your **ViT Assistant** ⚡ Here's what I can help with:\n\n🗺️ **Navigate** — "Take me to Buy"\n🔍 **Search** — "Find a backpack under ₹500"\n📖 **Explain** — "How do I sell an item?"\n🔄 **Trade** — "How does trading work?"\n🔑 **Account** — "How do I change my password?"\n🌙 **Theme** — "Switch to dark mode"\n💬 **Support** — "How do I contact support?"\n\nJust type naturally — I understand plain English!`
+  // ── STATUS OF ITEM ───────────────────────────────────────
+  { name:'item_status',
+    keywords:[/what (does|is) (sold|traded|available|pending) mean/i,/item (status|states)/i,/what (do|does) the (status|badge|tag) mean/i,/sold badge/i,/traded badge/i],
+    handler:()=>`**Item Status Meanings:**\n\n✅ **Available** — Listed & ready to buy/trade\n💰 **Sold** — Purchased by a buyer\n🔄 **Traded** — Swapped via a trade offer\n⏳ **Pending** — Reserved / transaction in progress\n\n**Trade badges:**\n🔄 — Item accepts trade offers\n\n**Offer statuses:**\n⏳ Pending → waiting for seller\n✅ Accepted → deal done!\n❌ Rejected → declined\n💬 Countered → seller sent a different price`
   },
 
-  // --- THANKS ---
-  { name: 'thanks', keywords: [/^thanks?$/i,/^thank you$/i,/^thx$/i,/^ty$/i,/thank(s| you)/i,/appreciate/i,/that.s helpful/i,/helpful/i],
-    handler: () => `You're welcome! 😊 Happy to help.\n\n**Happy trading on ViTMART!** ⚡`
+  // ── HOW REC WORKS ────────────────────────────────────────
+  { name:'how_rec_works',
+    keywords:[/how (do|does|do) (the )?recommendation(s)? work/i,/why (is|are) this (recommended|showing)/i,/how (does|do) it know/i,/personalisation/i,/recommendation engine/i,/why (are|is) you recommending/i],
+    handler:()=>`**✨ How Recommendations Work:**\n\nViTMART learns from your behaviour:\n\n👁️ **Views** — items you look at (low weight)\n❤️ **Wishlist saves** — stronger signal\n🛒 **Cart adds** — strong signal\n💰 **Purchases** — strongest signal\n⭐ **Reviews you write** — medium weight\n\n**Recency decay** — recent activity counts more than old.\n\n**Diversity** — max 2 items per category, max 2 per seller, so you always see variety.\n\n**Price range** — learns your typical budget and boosts items in that range.\n\nThe more you interact, the better it gets! 🎯`
   },
 
-  // --- GOODBYE ---
-  { name: 'bye', keywords: [/^bye$/i,/^goodbye$/i,/^cya$/i,/see you/i,/ok thanks/i,/okay thanks/i,/got it/i,/all good/i],
-    handler: () => `See you around! ⚡ Come back anytime you need help. **Happy trading!** 🎓`
+  // ── PRICE HISTORY ───────────────────────────────────────
+  { name:'price_history',
+    keywords:[/price history/i,/price change/i,/how (has|did) (the )?price (change|drop|increase)/i,/original price/i,/was (the )?price different/i],
+    handler:()=>`**💹 Price History:**\n\nSellers can update their listing price anytime using the **✏️ Edit Price** button on their product detail page.\n\nWhen a seller edits the price:\n— The new price is updated instantly for all buyers\n— The old price is stored as \`lastPriceUpdate\` timestamp\n— Counter offers (from negotiations) never change the listed price — they're private\n\n💡 If you see a price you think is too high, use **"Make a Price Offer"** to negotiate!`
+  },
+
+  // ── PROFILE PICTURE ──────────────────────────────────────
+  { name:'profile_picture',
+    keywords:[/profile picture/i,/profile photo/i,/change (my )?(picture|photo|avatar|pic|pfp)/i,/update (my )?(picture|photo|avatar|pic|pfp)/i,/how (to|do i) (set|change|update) (my )?(avatar|photo|picture)/i],
+    handler:()=>{ if(!currentUser) return "Please **sign in** first to update your profile."; setActiveTab('profile'); closeChatUI(); return `To **change your profile picture** (opened Profile!):\n\n1️⃣ Click **"Change Picture"** on your profile page\n2️⃣ Choose one of three options:\n   📤 **Upload** your own photo\n   🎨 **Pick an avatar** from the gallery\n3️⃣ Click **Save**\n\n✅ Your picture updates on all your listings automatically!`; }
+  },
+
+  // ── CART ─────────────────────────────────────────────────
+  { name:'cart',
+    keywords:[/cart/i,/shopping cart/i,/what.s in (my )?cart/i,/how (to|do i) (view|open|see) (my )?cart/i,/add to cart/i,/remove from cart/i,/cart is empty/i],
+    handler:()=>{
+      const cartCount = Object.keys(cart).length;
+      return `**🛒 Your Shopping Cart:**\n\nYou currently have **${cartCount} item(s)** in your cart.\n\n📍 Access the cart by clicking the **cart icon** (top-right header)\n\n**In the cart you can:**\n— See all added items & prices\n— Remove individual items ✕\n— See the running total\n— Click **Proceed to Checkout** to complete purchase\n\n💡 Cart items are synced across devices via your account!`;
+    }
+  },
+
+  // ── SELLER CONTACT ────────────────────────────────────────
+  { name:'seller_contact',
+    keywords:[/contact (the )?seller/i,/how (do|to) (i |we )?contact/i,/reach (the )?seller/i,/talk to seller/i,/seller email/i,/message (the )?seller/i,/get in touch/i],
+    handler:()=>`**📧 Contacting a Seller:**\n\n**After buying:**\n1️⃣ Go to **My Orders**\n2️⃣ Click **"Contact Seller"** next to the item\n3️⃣ A pre-filled email opens — just add your message!\n\n**Before buying:**\n— Open the product detail page\n— You'll see the seller's name\n— Go to **My Orders** after purchase to get their email\n\n🤝 Most sellers arrange campus meetups at:\n📍 Library, Cafeteria, Hostels, Academic blocks`
+  },
+
+  // ── CAMPUS MEETUP ─────────────────────────────────────────
+  { name:'meetup',
+    keywords:[/meetup/i,/meet up/i,/where (to|do) (we |i )?meet/i,/pickup (location|spot|place)/i,/collection point/i,/how (do|to) (i |we )?collect/i,/campus (location|spot)/i,/arrange (a )?meetup/i],
+    handler:()=>`**🏫 Campus Meetup Tips:**\n\nAll ViTMART transactions happen in person on campus!\n\n**Good meetup spots:**\n📚 Main Library lobby\n☕ Cafeteria / Mess areas\n🏛️ Academic Block corridors\n🏠 Hostel common areas\n\n**Arrange it via email** (from My Orders → Contact Seller)\n\n✅ **Safety tips:**\n— Meet during daytime\n— Bring the exact amount\n— Test electronics before paying\n— Screenshot the listing before meeting`
+  },
+
+  // ── MULTIPLE ITEMS ───────────────────────────────────────
+  { name:'bulk_buy',
+    keywords:[/buy (multiple|more than one|several|many)/i,/buy (2|two|3|three) items/i,/order (multiple|several)/i,/bulk (buy|purchase|order)/i,/can i buy (more than one|multiple)/i],
+    handler:()=>`**🛒 Buying Multiple Items:**\n\nYes! You can buy multiple items in one checkout:\n\n1️⃣ Browse the Buy page\n2️⃣ **Add to Cart** for each item you want\n3️⃣ Open cart → all items appear with total\n4️⃣ **Proceed to Checkout** pays for everything at once\n\n💡 After checkout, each seller gets notified separately — arrange individual meetups per seller.\n\n⚠️ If items are from **different sellers**, you'll need separate meetups for each.`
+  },
+
+  // ── SOLD ITEM ────────────────────────────────────────────
+  { name:'sold_item',
+    keywords:[/my item (was |is )?sold/i,/someone bought/i,/item got sold/i,/how (do|will) i know (if |when )?my item (is |was |got )?sold/i,/when (my |an )?item (is |gets )?sold/i,/notify (me )?when/i],
+    handler:()=>`**💰 When Your Item Gets Sold:**\n\n🔔 You'll get an **instant notification** (bell icon) when someone purchases your item.\n\n📧 The buyer's email is available in your **My Orders** tab — wait for their message or reach out first to arrange pickup.\n\n🏷️ Your listing automatically changes to **SOLD** and disappears from the marketplace.\n\n**After the sale:**\n1️⃣ Arrange a campus meetup with the buyer\n2️⃣ Hand over the item\n3️⃣ Confirm payment (cash/UPI on the spot)\n4️⃣ Done! ✅`
+  },
+
+  // ── LISTING TIPS ─────────────────────────────────────────
+  { name:'listing_tips',
+    keywords:[/tip(s)? (for |on )?listing/i,/how (to |do i )?write (a |good |better )?listing/i,/good listing/i,/sell faster/i,/listing (advice|suggestions|tricks)/i,/how (to |do i )?price (my |an )?item/i,/what (price|amount) should i (ask|set|charge)/i],
+    handler:()=>`**⚡ Listing Tips for Faster Sales:**\n\n📸 **Photo** — Clear, well-lit. Shows actual condition.\n📝 **Title** — Be specific: "MTech Sem 3 DSA Notes" > "Notes"\n📄 **Description** — Mention: edition, condition, why you're selling\n💰 **Price** — Check what similar items sell for. Price 10–20% below for quick sale.\n🔄 **Enable Trade** — More offers = faster disposal\n🤝 **Accept Price Offers** — Negotiating beats it sitting unsold\n📂 **Category** — Choose carefully, wrong category = less visibility\n\n🏆 **Best performing listings have:** good photo + specific title + honest condition description`
+  },
+
+  // ── WHAT HAPPENS AFTER TRADE ─────────────────────────────
+  { name:'after_trade',
+    keywords:[/after (a |the )?trade/i,/trade (is |was )?accepted/i,/what happens when.*trade/i,/trade (complete|done|finished)/i,/accepted (a )?trade/i,/trade (order|history)/i],
+    handler:()=>`**✅ After a Trade is Accepted:**\n\n1️⃣ Both items get marked **TRADED** on the platform\n2️⃣ The trade appears in **My Orders** tab (with ₹0 value)\n3️⃣ The offerer gets a **notification** that their offer was accepted\n4️⃣ Both parties arrange a campus meetup to exchange items\n\n📧 Use **"Contact Seller"** from My Orders to coordinate the swap.\n\n💡 Take photos of both items before the swap — just in case!`
+  },
+
+  // ── EMAIL NOT WORKING ─────────────────────────────────────
+  { name:'email_issue',
+    keywords:[/email (not working|wrong|incorrect|changed)/i,/can.t (sign in|login|access)/i,/forgot (my )?email/i,/wrong email/i,/can i change (my )?email/i,/update (my )?email/i],
+    handler:()=>`**📧 Email Issues:**\n\n**Can't log in?**\n→ Use **"Forgot Password"** on the sign-in screen\n→ Check your spam folder for the reset email\n\n**Wrong email registered?**\n→ Firebase doesn't allow email changes directly\n→ Contact support: **swastiksinha001@gmail.com**\n\n**Didn't get verification email?**\n→ Click "Resend Email" on the verification screen\n→ Check spam/junk folder\n→ Wait 2 minutes, then click the link\n\n⚠️ ViTMART accounts require **email verification** before you can buy or sell.`
+  },
+
+  // ── HOW MANY LISTINGS ────────────────────────────────────
+  { name:'listing_limit',
+    keywords:[/how many (listings|items) can i (post|list|sell|have)/i,/listing limit/i,/maximum (listings|items)/i,/limit (on |for )?(listings|items)/i],
+    handler:()=>`**📋 Listing Limits:**\n\nThere is **no hard limit** on how many items you can list on ViTMART!\n\nYou can list as many items as you want.\n\n💡 **Best practice:**\n— Remove sold/traded items promptly (or they auto-mark when purchased)\n— Keep descriptions fresh and accurate\n— Use **Manage** → bulk-delete old sold listings to keep your store clean\n\nGo to **Sell** → List My Item to post a new listing! ⚡`
+  },
+
+  // ── TRADE vs BUY ─────────────────────────────────────────
+  { name:'trade_vs_buy',
+    keywords:[/difference between (buy|trade|barter)/i,/(buy|trade|barter) vs/i,/should i (buy|trade)/i,/trade or buy/i,/what.s the difference.*trade.*buy/i],
+    handler:()=>`**Buy vs Trade — What's the difference?**\n\n💰 **Buy**\n— Pay cash (simulated on platform, real payment in person)\n— Straightforward: you pay, seller gives item\n— Any available item can be bought\n\n🔄 **Trade / Barter**\n— Exchange items, no money needed\n— Both parties agree to swap what they have\n— Only items with 🔄 badge accept trade offers\n— Seller sees your offer + what you're offering in return\n\n💡 **Which to use?**\n— Have cash → Buy\n— Have something to swap & no cash → Trade\n— Want to negotiate on price → Make a Price Offer`
+  },
+
+  // ── ITEM CONDITION ───────────────────────────────────────
+  { name:'item_condition',
+    keywords:[/item condition/i,/what condition/i,/(is|are) (the )?item(s)? (new|used|second.?hand)/i,/second.?hand/i,/pre.?owned/i,/used items/i,/refurbished/i,/quality (of |check)/i],
+    handler:()=>`**📦 Item Conditions on ViTMART:**\n\nViTMART is a **second-hand / used items** marketplace — everything is pre-owned by fellow students.\n\nSellers describe conditions in their listings:\n✨ **Like New** — barely used, looks new\n✅ **Good** — minor signs of use, fully functional\n⚠️ **Fair** — visible wear but works fine\n🔧 **For Parts** — may need repair\n\n💡 **Tip:** Always:\n— Read the description carefully\n— Look at all photos\n— Ask the seller before meeting\n— Test electronics at the meetup before paying`
+  },
+
+  // ── FORGOT PASSWORD ──────────────────────────────────────
+  { name:'forgot_password',
+    keywords:[/forgot password/i,/reset password/i,/can.t (remember|recall) (my )?password/i,/password reset/i,/lost (my )?password/i,/how (to|do i) reset/i],
+    handler:()=>`**🔑 Reset Your Password:**\n\n1️⃣ On the **Sign In** screen, click **"Forgot Password?"**\n2️⃣ Enter your registered email\n3️⃣ Check your inbox (and spam!) for the reset email\n4️⃣ Click the link in the email\n5️⃣ Set a new password (min 6 characters)\n\n✅ You can also change your password from **Profile** → Security section if you're already logged in.\n\n⚠️ The reset link expires in 1 hour. Request a new one if needed.`
+  },
+
+  // ── WHO BUILT THIS ────────────────────────────────────────
+  { name:'who_built',
+    keywords:[/who (built|made|created|developed) (this|vitmart)/i,/who (is|are) (the |vitmart.s )?developer/i,/about (the )?developer/i,/creator/i,/admin of vitmart/i],
+    handler:()=>`**👨‍💻 About ViTMART:**\n\nViTMART was built by a VIT student for VIT students. 🎓\n\n**Admin & Developer:** Swastik Sinha\n**Contact:** swastiksinha001@gmail.com\n**Instagram:** @ig_swastik\n\nBuilt with Firebase, Tailwind CSS, Cloudinary, and a lot of caffeine ☕\n\nHave feedback or feature requests? Email the admin — all ideas are welcome! 🚀`
+  },
+
+  // ── GENERAL HELP ─────────────────────────────────────────
+  { name:'help',
+    keywords:[/^help$/i,/what can you (do|help with)/i,/commands/i,/features/i,/what do you know/i,/what questions/i,/capabilities/i,/full list/i],
+    handler:()=>`I'm **ViT Assistant** ⚡ I know **46 topics** about ViTMART!\n\n**Tap a chip below** or type anything:\n\n🗺️ Navigate · 🔍 Search · 📖 How-to guides\n🤝 Price offers · 🔄 Trade vs Buy · 🛒 Cart\n📌 Noticeboard · 🔔 Notifications · ✨ Recs\n📦 Orders · 💰 Listing tips · 🏫 Meetup spots\n🌙 Dark mode · 🔑 Password reset · 👨‍💻 About us\n\nJust ask naturally — I understand plain English!`
+  },
+
+  // ── THANKS ───────────────────────────────────────────────
+  { name:'thanks',
+    keywords:[/^thanks?$/i,/^thank you$/i,/^thx$/i,/^ty$/i,/thank(s| you)/i,/appreciate/i,/that.s helpful/i,/helpful/i,/great/i,/perfect/i,/awesome/i],
+    handler:()=>`You're welcome! 😊\n\n**Happy trading on ViTMART!** ⚡\n\nType **help** anytime if you need anything else.`
+  },
+
+  // ── BYE ──────────────────────────────────────────────────
+  { name:'bye',
+    keywords:[/^bye$/i,/^goodbye$/i,/^cya$/i,/see you/i,/ok thanks/i,/okay thanks/i,/got it/i,/all good/i,/done$/i,/that.s all/i],
+    handler:()=>`See you around! ⚡\n\nCome back anytime — **happy trading!** 🎓`
   },
 ];
 
@@ -2368,31 +2571,70 @@ const renderPrivacyModal = () => {
 };
 
 // --- Popup Chat ---
+const QUICK_CHIPS = [
+  '🛒 How to buy', '💰 How to sell', '🔄 How to trade',
+  '📌 Noticeboard', '🔔 Notifications', '✨ Recommendations',
+  '🤝 Price offers', '⭐ Reviews', '🔍 Lost & Found',
+  '🗑️ Manage data', '🔑 Change password', '💬 Support',
+];
+
 const renderPopupChat = () => {
+  const name = currentUser ? currentUser.displayName.split(' ')[0] : 'there';
   popupChatWidget.innerHTML = `
     <div id="popup-chat-container" class="glass-strong rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-vit-500/20">
-      <div class="p-4 border-b border-vit-500/10 flex items-center justify-between bg-gradient-to-r from-vit-600 to-vit-800">
+      <div class="flex-shrink-0 p-4 border-b border-vit-500/10 flex items-center justify-between bg-gradient-to-r from-vit-600 to-vit-800">
         <div class="flex items-center gap-3">
-          <img src="${campusBot.photoURL}" class="w-9 h-9 rounded-xl object-cover">
-          <div><h3 class="text-sm font-bold text-white">${campusBot.displayName}</h3><p class="text-xs text-vit-300">Online</p></div>
+          <div style="width:36px;height:36px;background:rgba(255,255,255,0.15);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px">⚡</div>
+          <div>
+            <h3 class="text-sm font-bold text-white">ViT Assistant</h3>
+            <div class="flex items-center gap-1.5"><div style="width:6px;height:6px;background:#34d399;border-radius:50%"></div><p class="text-xs text-vit-300">Online · 31 topics</p></div>
+          </div>
         </div>
-        <button id="close-popup-chat-btn" class="text-white/70 hover:text-white text-xl w-7 h-7 flex items-center justify-center">&times;</button>
+        <button id="close-popup-chat-btn" class="text-white/60 hover:text-white text-2xl w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors">&times;</button>
       </div>
-      <div id="popup-chat-messages" class="flex-grow p-4 overflow-y-auto space-y-3 flex flex-col">
-        <div class="bot-bubble max-w-[80%] p-3 rounded-2xl rounded-tl-sm text-sm self-start">Hi there! ⚡ How can I help you on ViTMART?</div>
+      <div id="popup-chat-messages" class="flex-grow p-4 overflow-y-auto space-y-3 flex flex-col" style="min-height:0">
+        <div class="bot-bubble max-w-[88%] p-3 rounded-2xl rounded-tl-sm text-sm self-start" style="opacity:0;transform:translateY(8px);transition:opacity 0.25s,transform 0.25s">
+          Hey <strong>${name}</strong>! ⚡ I'm your campus marketplace guide.<br><br>
+          Tap a topic below or type anything naturally.
+        </div>
       </div>
-      <div class="p-3 border-t border-vit-500/10 bg-gray-50 dark:bg-white/2">
-        <form id="popup-chat-form" class="flex gap-2">
-          <input type="text" id="popup-chat-input" placeholder="Ask something..." class="vit-input flex-grow text-sm py-2.5" autocomplete="off" required>
-          <button type="submit" class="p-2.5 bg-gradient-to-r from-vit-600 to-vit-700 text-white rounded-xl shimmer-btn shadow-lg shadow-vit-500/30">
-            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" transform="rotate(90)"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/></svg>
-          </button>
-        </form>
+      <div class="flex-shrink-0 border-t border-vit-500/10">
+        <div id="quick-chips-bar"></div>
+        <div class="p-3 pt-0 bg-gray-50 dark:bg-white/2">
+          <form id="popup-chat-form" class="flex gap-2">
+            <input type="text" id="popup-chat-input" placeholder="Ask me anything about ViTMART…" class="vit-input flex-grow text-sm py-2.5" autocomplete="off">
+            <button type="submit" class="p-2.5 bg-gradient-to-r from-vit-600 to-vit-700 text-white rounded-xl shimmer-btn shadow-lg shadow-vit-500/30 flex-shrink-0">
+              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" transform="rotate(90)"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/></svg>
+            </button>
+          </form>
+        </div>
       </div>
     </div>
-    <button id="open-popup-chat-btn" class="w-14 h-14 bg-gradient-to-br from-vit-600 to-vit-700 text-white rounded-2xl shadow-2xl shadow-vit-500/40 flex items-center justify-center shimmer-btn animate-float">
+    <button id="open-popup-chat-btn" class="w-14 h-14 bg-gradient-to-br from-vit-600 to-vit-700 text-white rounded-2xl shadow-2xl shadow-vit-500/40 flex items-center justify-center shimmer-btn animate-float" style="position:relative">
       <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
     </button>`;
+
+  // Animate welcome bubble
+  setTimeout(() => {
+    const wb = document.querySelector('#popup-chat-messages .bot-bubble');
+    if (wb) { wb.style.opacity='1'; wb.style.transform='translateY(0)'; }
+  }, 60);
+
+  // Render quick chips
+  const bar = document.getElementById('quick-chips-bar');
+  if (bar) {
+    bar.innerHTML = QUICK_CHIPS.map(c =>
+      `<button class="quick-chip" data-chip="${c}">${c}</button>`
+    ).join('');
+    bar.querySelectorAll('.quick-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const input = document.getElementById('popup-chat-input');
+        if (input) { input.value = btn.dataset.chip; }
+        // Simulate form submit
+        document.getElementById('popup-chat-form')?.dispatchEvent(new Event('submit', {bubbles:true, cancelable:true}));
+      });
+    });
+  }
 };
 
 const handlePopupSendMessage = (e) => {
@@ -2408,9 +2650,11 @@ const handlePopupSendMessage = (e) => {
   // User message bubble
   const userEl = document.createElement('div');
   userEl.className = 'max-w-[80%] p-3 rounded-2xl rounded-tr-sm bg-gradient-to-br from-vit-600 to-vit-700 text-white text-sm self-end';
+  userEl.style.cssText = 'opacity:0;transform:translateX(10px);transition:opacity 0.15s,transform 0.15s';
   userEl.textContent = filtered;
   msgs.appendChild(userEl);
   msgs.scrollTop = msgs.scrollHeight;
+  requestAnimationFrame(() => { userEl.style.opacity='1'; userEl.style.transform='translateX(0)'; });
 
   // Typing indicator
   const typingEl = document.createElement('div');
@@ -2419,24 +2663,30 @@ const handlePopupSendMessage = (e) => {
   msgs.appendChild(typingEl);
   msgs.scrollTop = msgs.scrollHeight;
 
+  // Match intent immediately (no delay for matching)
+  let reply; let found = false;
+  for (const intent of chatbotIntents) {
+    for (const kw of intent.keywords) {
+      if (filtered.match(kw)) { reply = intent.handler(filtered); found = true; break; }
+    }
+    if (found) break;
+  }
+  if (!found) reply = `Hmm, I didn\'t quite catch that. 🤔\n\nTry:\n- **"How do I sell an item?"**\n- **"Find a laptop under ₹8000"**\n- **"How do price offers work?"**\n- **"What is the noticeboard?"**\n\nOr type **help** for the full list.`;
+
+  // Show typing for a natural feel (shorter = snappier)
+  const typingDelay = Math.min(400 + reply.length * 0.8, 900);
   setTimeout(() => {
     typingEl.remove();
-    let reply; let found = false;
-    for (const intent of chatbotIntents) {
-      for (const kw of intent.keywords) {
-        if (filtered.match(kw)) { reply = intent.handler(filtered); found = true; break; }
-      }
-      if (found) break;
-    }
-    if (!found) reply = `I'm not sure how to help with that. 🤔\n\nTry asking:\n- "How do I sell an item?"\n- "Find a laptop under ₹10000"\n- "What is the trade page?"\n\nOr type **help** for a full list.`;
     const botEl = document.createElement('div');
     botEl.className = 'bot-bubble max-w-[85%] p-3 rounded-2xl rounded-tl-sm text-sm self-start leading-relaxed';
+    botEl.style.cssText = 'opacity:0;transform:translateY(6px);transition:opacity 0.2s,transform 0.2s';
     botEl.innerHTML = reply
       .replace(/\*\*(.*?)\*\*/g, '<strong class="text-vit-600 dark:text-vit-400">$1</strong>')
       .replace(/\n/g, '<br>');
     msgs.appendChild(botEl);
     msgs.scrollTop = msgs.scrollHeight;
-  }, 950);
+    requestAnimationFrame(() => { botEl.style.opacity='1'; botEl.style.transform='translateY(0)'; });
+  }, typingDelay);
 };
 
 // --- Auth Logic ---
@@ -4305,21 +4555,21 @@ const renderNoticeFeed = (notices, filter='all') => {
         <h3 class="font-black text-gray-900 dark:text-white text-base mb-1">${n.title}</h3>
         <p class="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">${n.body}</p>
         <div class="mt-4 flex items-center gap-3">
-          <button class="expand-replies-btn flex items-center gap-1.5 text-xs font-bold text-vit-600 dark:text-vit-400 hover:text-vit-700 transition-colors" data-notice-id="${n.id}">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
-            <span id="reply-count-${n.id}">${n.replyCount||0} ${n.replyCount===1?'reply':'replies'}</span>
+          <button class="expand-replies-btn reply-count-chip ${(n.replyCount||0)>0?'has-replies':''} flex items-center gap-1.5 text-xs font-bold hover:opacity-80 transition-all" data-notice-id="${n.id}">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+            <span id="reply-count-${n.id}">${(n.replyCount||0)>0 ? `${n.replyCount} ${n.replyCount===1?'reply':'replies'}` : 'Reply'}</span>
           </button>
 
         </div>
       </div>
       <!-- Replies section -->
-      <div class="replies-container" id="replies-container-${n.id}">
-        <div class="border-t border-gray-100 dark:border-white/10 px-5 pb-5 pt-4">
-          <div id="replies-list-${n.id}" class="space-y-3 mb-4"></div>
-          <form class="reply-form flex gap-2" data-notice-id="${n.id}">
-            <input type="text" class="reply-input vit-input flex-grow text-sm py-2" placeholder="Write a reply…" required maxlength="300">
-            <button type="submit" class="px-4 py-2 bg-gradient-to-r from-vit-600 to-vit-700 text-white text-sm font-bold rounded-xl shimmer-btn flex-shrink-0">Reply</button>
-          </form>
+      <div class="replies-container replies-panel" id="replies-container-${n.id}">
+        <div id="replies-list-${n.id}" class="px-5 pt-3 space-y-2"></div>
+        <div class="reply-input-row">
+          <input type="text" class="reply-input vit-input flex-grow" placeholder="Write a reply…" maxlength="300" data-notice-id="${n.id}">
+          <button type="button" class="reply-submit-btn" data-notice-id="${n.id}" title="Send reply">
+            <svg fill="currentColor" viewBox="0 0 20 20" transform="rotate(90)"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/></svg>
+          </button>
         </div>
       </div>
     </div>`;
@@ -4331,38 +4581,75 @@ const renderNoticeFeed = (notices, filter='all') => {
       const nid = btn.dataset.noticeId;
       const container = document.getElementById(`replies-container-${nid}`);
       const isOpen = container.classList.contains('open');
+      // Haptic-feel: scale the button briefly
+      btn.style.transform = 'scale(0.9)';
+      requestAnimationFrame(() => { btn.style.transform = ''; });
       if (isOpen) {
         container.classList.remove('open');
         if (currentNoticeRepliesUnsubs[nid]) { currentNoticeRepliesUnsubs[nid](); delete currentNoticeRepliesUnsubs[nid]; }
       } else {
         container.classList.add('open');
         listenReplies(nid);
+        // Focus the input after animation
+        setTimeout(() => {
+          const inp = document.querySelector(`.reply-input[data-notice-id="${nid}"]`);
+          inp?.focus();
+        }, 260);
       }
     });
   });
 
-  // Reply forms
-  feed.querySelectorAll('.reply-form').forEach(form => {
-    form.addEventListener('submit', async e => {
-      e.preventDefault();
-      const nid = form.dataset.noticeId;
-      const inp = form.querySelector('.reply-input');
-      const text = filterProfanity(inp.value.trim());
-      if (!text) return;
-      const submitBtn = form.querySelector('button[type=submit]');
-      submitBtn.disabled = true;
-      try {
-        const batch = db.batch();
-        const replyRef = db.collection('noticeboard').doc(nid).collection('replies').doc();
-        batch.set(replyRef, {
-          text, authorId: currentUser.uid, authorName: currentUser.displayName||'Student',
-          authorPhoto: currentUser.photoURL||null, createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        batch.update(db.collection('noticeboard').doc(nid), { replyCount: firebase.firestore.FieldValue.increment(1) });
-        await batch.commit();
-        inp.value = '';
-      } catch(err) { showMessage('Error: '+err.message,'error'); }
-      finally { submitBtn.disabled=false; }
+  // Reply submit buttons (new button-based UI)
+  const submitReply = async (nid, inp, btn) => {
+    const text = filterProfanity(inp.value.trim());
+    if (!text) { inp.focus(); return; }
+    const origHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" opacity="0.3"/><path d="M12 2a10 10 0 0110 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    try {
+      const batch = db.batch();
+      const replyRef = db.collection('noticeboard').doc(nid).collection('replies').doc();
+      batch.set(replyRef, {
+        text, authorId: currentUser.uid, authorName: currentUser.displayName||'Student',
+        authorPhoto: currentUser.photoURL||null, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      batch.update(db.collection('noticeboard').doc(nid), { replyCount: firebase.firestore.FieldValue.increment(1) });
+      await batch.commit();
+      inp.value = '';
+      // Update count chip immediately (optimistic)
+      const countEl = document.getElementById(`reply-count-${nid}`);
+      const countBtn = document.querySelector(`.expand-replies-btn[data-notice-id="${nid}"]`);
+      if (countBtn) countBtn.classList.add('has-replies');
+    } catch(err) { showMessage('Error: '+err.message,'error'); }
+    finally { btn.disabled=false; btn.innerHTML=origHTML; }
+  };
+
+  feed.querySelectorAll('.reply-submit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const nid = btn.dataset.noticeId;
+      const inp = feed.querySelector(`.reply-input[data-notice-id="${nid}"]`);
+      if (inp) submitReply(nid, inp, btn);
+    });
+  });
+
+  // Also submit on Enter key in reply input
+  feed.querySelectorAll('.reply-input').forEach(inp => {
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const nid = inp.dataset.noticeId;
+        const btn = feed.querySelector(`.reply-submit-btn[data-notice-id="${nid}"]`);
+        if (btn) submitReply(nid, inp, btn);
+      }
+    });
+    // Auto-open replies section when user starts typing
+    inp.addEventListener('focus', () => {
+      const nid = inp.dataset.noticeId;
+      const container = document.getElementById(`replies-container-${nid}`);
+      if (container && !container.classList.contains('open')) {
+        container.classList.add('open');
+        listenReplies(nid);
+      }
     });
   });
 
@@ -4386,7 +4673,7 @@ const listenReplies = (noticeId) => {
     .collection('replies').orderBy('createdAt','asc').limit(30)
     .onSnapshot(snap => {
       if (!snap.docs.length) { listEl.innerHTML=`<p class="text-xs text-gray-400">No replies yet. Be the first!</p>`; return; }
-      listEl.innerHTML = snap.docs.map(d => {
+      listEl.innerHTML = snap.docs.map((d, i) => {
         const r = d.data();
         const initials = (r.authorName||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
         const av = r.authorPhoto
@@ -4394,7 +4681,7 @@ const listenReplies = (noticeId) => {
           : `<div class="w-7 h-7 rounded-lg bg-gradient-to-br from-vit-500 to-cyan-500 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">${initials}</div>`;
         const ts = r.createdAt ? timeAgoStr(r.createdAt.toDate ? r.createdAt.toDate() : new Date()) : '';
         const mine = r.authorId === currentUser?.uid;
-        return `<div class="reply-bubble flex items-start gap-2">
+        return `<div class="reply-bubble flex items-start gap-2" style="opacity:0;transform:translateY(4px);animation:reply-in 0.18s ease forwards;animation-delay:${i*40}ms">
           ${av}
           <div class="flex-grow min-w-0">
             <div class="flex items-center gap-2">
