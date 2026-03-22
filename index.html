@@ -2658,6 +2658,16 @@ const handleTradeOfferSubmit = async (e) => {
       offererEmail:currentUser.email, offererPhotoURL:currentUser.photoURL,
       status:'pending', createdAt:firebase.firestore.FieldValue.serverTimestamp()
     });
+    // Notify the seller directly
+    const tradeProd = products.find(p => p.id === productId);
+    if (tradeProd && tradeProd.sellerId && tradeProd.sellerId !== currentUser.uid) {
+      sendNotification(tradeProd.sellerId, {
+        type: 'trade_offer',
+        title: '🔄 New Trade Offer!',
+        body: `${currentUser.displayName || 'Someone'} sent a trade offer on "${tradeProd.name}".`,
+        productId
+      });
+    }
     showMessage('Trade offer submitted!','success');
     tradeOfferModal.classList.remove('show');
   } catch(e) { showMessage(`Error: ${e.message}`,'error'); }
@@ -2847,6 +2857,7 @@ auth.onAuthStateChanged(user => {
     });
 
     renderHeaderActions(); renderPopupChat(); setActiveTab('home');
+    setTimeout(() => document.dispatchEvent(new Event('vitmart-user-ready')), 100);
   } else {
     currentUser=null; products=[]; cart={}; orders=[]; lostAndFoundItems=[];
     navigationHistory=['home'];
@@ -4248,6 +4259,15 @@ const renderPriceOfferModal = (product) => {
         originalPrice: product.price, status: 'pending',
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
+      // Notify the seller directly here (most reliable approach)
+      if (product.sellerId && product.sellerId !== currentUser.uid) {
+        sendNotification(product.sellerId, {
+          type: 'price_offer',
+          title: '💰 New Price Offer!',
+          body: `${currentUser.displayName || 'Someone'} offered ₹${offerPrice} for "${product.name}".`,
+          productId: product.id
+        });
+      }
       showMessage('Offer sent! The seller will see your offer on their listing.','success');
       modal.classList.remove('show');
     } catch(err) { showMessage('Error: '+err.message,'error'); }
@@ -4655,10 +4675,13 @@ const startNotifListener = () => {
   notifUnsubscribe();
   notifUnsubscribe = db.collection('notifications')
     .where('uid', '==', currentUser.uid)
-    .orderBy('createdAt', 'desc')
-    .limit(30)
+    .limit(50)
     .onSnapshot(snap => {
-      const notifs = snap.docs.map(d => ({id: d.id, ...d.data()}));
+      // Sort client-side to avoid needing a composite Firestore index
+      const notifs = snap.docs
+        .map(d => ({id: d.id, ...d.data()}))
+        .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
+        .slice(0, 30);
       const unread = notifs.filter(n => !n.read).length;
       updateNotifBadge(unread);
       renderNotifList(notifs);
@@ -4745,24 +4768,7 @@ document.body.addEventListener('click', e => {
 
 // ── Wire notifications into existing buy/trade flows ─────────────────────
 
-// Patch handleTradeOfferSubmit to notify seller
-const _origHandleTradeOfferSubmit = handleTradeOfferSubmit;
-document.body.addEventListener('submit', async e => {
-  if (e.target.id !== 'trade-offer-form') return;
-  // notification is sent after the offer is saved (after the original handler runs)
-  const productId = e.target.dataset.productId;
-  const product = products.find(p => p.id === productId);
-  if (product && product.sellerId !== currentUser?.uid) {
-    setTimeout(async () => {
-      await sendNotification(product.sellerId, {
-        type: 'trade_offer',
-        title: '🔄 New Trade Offer!',
-        body: `${currentUser.displayName || 'Someone'} made a trade offer on "${product.name}".`,
-        productId
-      });
-    }, 800);
-  }
-}, true); // capture phase so it fires before the submit handler
+// trade offer notify handled directly inside handleTradeOfferSubmit
 
 // Patch handleCheckout to notify sellers of purchases
 const _origHandleCheckout = handleCheckout;
@@ -4780,31 +4786,7 @@ window._afterCheckoutNotify = async (purchasedItems) => {
   }
 };
 
-// Patch price offer submission to notify seller
-const _origPriceOfferClick = window.renderPriceOfferModal;
-window.renderPriceOfferModal = (product) => {
-  _origPriceOfferClick(product);
-  // patch the submit button inside the modal after it renders
-  setTimeout(() => {
-    const origClick = document.getElementById('submit-price-offer-btn')?.onclick;
-    const submitBtn = document.getElementById('submit-price-offer-btn');
-    if (submitBtn && product) {
-      const prevOnClick = submitBtn.onclick;
-      submitBtn.onclick = async (...args) => {
-        if (prevOnClick) await prevOnClick(...args);
-        // notify seller
-        if (product.sellerId !== currentUser?.uid) {
-          setTimeout(() => sendNotification(product.sellerId, {
-            type: 'price_offer',
-            title: '💰 New Price Offer!',
-            body: `${currentUser.displayName || 'Someone'} offered ₹${document.getElementById('offer-price-input')?.value || '?'} for "${product.name}".`,
-            productId: product.id
-          }), 600);
-        }
-      };
-    }
-  }, 50);
-};
+// price offer notify is handled directly inside renderPriceOfferModal
 
 // Start notif listener when user logs in
 document.addEventListener('vitmart-user-ready', () => { startNotifListener(); });
