@@ -576,6 +576,19 @@ tailwind.config = {
   .dark .edit-price-btn { color:#a78bfa; background:rgba(139,92,246,0.18); }
   .edit-price-btn:hover { background:rgba(139,92,246,0.2); transform:scale(1.04); }
 
+
+  /* ═══ NOTIFICATIONS ═══ */
+  #notif-bell-btn { position:relative; }
+  #notif-unread-badge { position:absolute; top:-5px; right:-5px; background:#f43f5e; color:white; font-size:10px; font-weight:800; min-width:16px; height:16px; border-radius:99px; display:none; align-items:center; justify-content:center; padding:0 3px; line-height:1; }
+  #notif-dropdown { position:fixed; top:68px; right:12px; width:340px; max-height:420px; z-index:1000; background:rgba(255,255,255,0.96); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); border:1px solid rgba(139,92,246,0.18); border-radius:20px; box-shadow:0 20px 60px rgba(139,92,246,0.18); display:none; flex-direction:column; overflow:hidden; }
+  .dark #notif-dropdown { background:rgba(12,8,28,0.96); border-color:rgba(139,92,246,0.22); }
+  #notif-dropdown.open { display:flex; animation:tab-reveal 0.25s cubic-bezier(0.34,1.2,0.64,1) forwards; }
+  .notif-item { display:flex; align-items:flex-start; gap:12px; padding:12px 14px; border-bottom:1px solid rgba(139,92,246,0.07); cursor:pointer; transition:background 0.15s; }
+  .notif-item:hover { background:rgba(139,92,246,0.05); }
+  .notif-item.unread { background:rgba(139,92,246,0.06); }
+  .notif-item.unread:hover { background:rgba(139,92,246,0.1); }
+  .notif-dot { width:8px; height:8px; background:#7c3aed; border-radius:50%; flex-shrink:0; margin-top:5px; }
+  .notif-icon-box { width:36px; height:36px; border-radius:10px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:16px; }
 </style>
 </head>
 <body class="bg-gray-50 dark:bg-[#0f0a1e] text-gray-800 dark:text-gray-200 transition-colors duration-300" style="cursor:none">
@@ -782,6 +795,17 @@ tailwind.config = {
 
 <div id="popup-chat-widget"></div>
 <div id="message-container" class="fixed top-20 right-5 z-50 space-y-3"></div>
+
+<!-- NOTIFICATION DROPDOWN -->
+<div id="notif-dropdown">
+  <div class="flex items-center justify-between px-4 py-3 border-b border-vit-500/10">
+    <h3 class="font-black text-gray-900 dark:text-white text-sm">🔔 Notifications</h3>
+    <button id="mark-all-read-btn" class="text-xs font-bold text-vit-600 dark:text-vit-400 hover:text-vit-700 transition-colors">Mark all read</button>
+  </div>
+  <div id="notif-list" class="overflow-y-auto flex-grow" style="max-height:340px;">
+    <p class="text-center text-gray-400 text-sm py-8">No notifications yet</p>
+  </div>
+</div>
 
 <!-- FIREBASE -->
 <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -1243,6 +1267,10 @@ const renderHeaderActions = () => {
       : `<div class="h-9 w-9 bg-gradient-to-br from-vit-600 to-cyan-500 rounded-xl flex items-center justify-center font-bold text-white text-sm">${getInitials(currentUser.displayName)}</div>`;
     headerActionsContainer.innerHTML = `
       ${themeToggle}
+      <button id="notif-bell-btn" class="icon-btn p-2 rounded-xl glass hover:shadow-lg hover:shadow-vit-500/20 transition-all duration-200 animate-subtle-pop" data-tooltip="Notifications" aria-label="Notifications">
+        <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+        <span id="notif-unread-badge">0</span>
+      </button>
       <button data-tab="reviews" class="icon-btn p-2 rounded-xl glass hover:shadow-lg hover:shadow-amber-500/20 transition-all duration-200 animate-subtle-pop" data-tooltip="Reviews" style="animation-delay:50ms" aria-label="Reviews">
         <svg class="w-5 h-5 text-amber-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
       </button>
@@ -2605,8 +2633,9 @@ const handleCheckout = async () => {
     checkoutModal.classList.remove('show');
     triggerConfetti();
     showMessage('Purchase complete! 🎉 Redirecting to your orders…','success');
+    // Notify sellers of the purchase
+    if (window._afterCheckoutNotify) window._afterCheckoutNotify(items);
     // Wait for the onSnapshot listener to pick up the new order, then navigate.
-    // Using a short timeout so Firestore has time to push the update.
     setTimeout(() => setActiveTab('orders'), 1200);
   } catch(e) { showMessage('Payment failed: '+(e.message||e.code||'Unknown error. Check your connection.'),'error'); console.error('Checkout error:',e); }
   finally { btn.disabled=false; btn.innerHTML='Pay Now'; }
@@ -2670,11 +2699,38 @@ const handleAcceptOffer = async (offerId, productId, offererId) => {
     const pr = db.collection('products').doc(productId);
     const or = pr.collection('offers').doc(offerId);
     try {
+      const product = products.find(p => p.id === productId);
       const batch = db.batch();
-      batch.update(pr,{status:'traded'});
-      batch.update(or,{status:'accepted'});
-      const snap = await pr.collection('offers').where('status','==','pending').get();
-      snap.forEach(d => { if(d.id!==offerId) batch.update(d.ref,{status:'rejected'}); });
+      batch.update(pr, {status:'traded'});
+      batch.update(or, {status:'accepted'});
+      // Reject remaining pending offers
+      const pendingSnap = await pr.collection('offers').where('status','==','pending').get();
+      pendingSnap.forEach(d => { if (d.id!==offerId) batch.update(d.ref,{status:'rejected'}); });
+      // Create an order record for the seller so trade appears in My Orders
+      if (product) {
+        const orderRef = db.collection('orders').doc();
+        batch.set(orderRef, {
+          userId: currentUser.uid,
+          userName: currentUser.displayName,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          total: 0,
+          orderType: 'trade',
+          items: [{
+            productId: product.id,
+            name: product.name,
+            price: product.price,
+            imageUrl: product.imageUrl || '',
+            quantity: 1
+          }]
+        });
+      }
+      // Notify the offerer that their trade was accepted
+      await sendNotification(offererId, {
+        type: 'trade_accepted',
+        title: '🔄 Trade Offer Accepted!',
+        body: product ? `Your trade offer for "${product.name}" was accepted by the seller.` : 'Your trade offer was accepted!',
+        productId
+      });
       await batch.commit();
       showMessage('Offer accepted! Item marked as traded.','success');
     } catch(e) { showMessage(`Error: ${e.message}`,'error'); }
@@ -4507,32 +4563,7 @@ const renderProductDetailPageV2 = (product) => {
   }
 
   // inject edit price for seller
-  if (isMyProduct && product.status==='available') {
-    const priceEl = document.querySelector('#product-detail-tab .text-5xl.font-black');
-    if (priceEl) {
-      const editBtn = document.createElement('button');
-      editBtn.className = 'edit-price-btn mt-2 mb-2';
-      editBtn.innerHTML = '✏️ Edit Price';
-      editBtn.onclick = () => renderEditPriceModal(product);
-      priceEl.insertAdjacentElement('afterend', editBtn);
-    }
-    // price offers
-    const offersSection = document.getElementById('offers-section');
-    if (offersSection) {
-      const poDiv = document.createElement('div');
-      poDiv.id = 'price-offers-section';
-      offersSection.parentNode.insertBefore(poDiv, offersSection.nextSibling);
-      renderPriceOffersSection(product.id, 'price-offers-section');
-    } else {
-      const detailCont = document.querySelector('#product-detail-tab .container');
-      if (detailCont) {
-        const poDiv = document.createElement('div');
-        poDiv.id = 'price-offers-section';
-        detailCont.appendChild(poDiv);
-        renderPriceOffersSection(product.id, 'price-offers-section');
-      }
-    }
-  }
+  // edit price btn and price offers already in renderProductDetailPage base template
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -4587,6 +4618,197 @@ const _origAuthChange = auth.onAuthStateChanged.bind(auth);
 // Expose key functions globally for inline onclick handlers
 window.renderPriceOfferModal = renderPriceOfferModal;
 window.renderEditPriceModal = renderEditPriceModal;
+
+
+// ═══════════════════════════════════════════════════════════
+// ░░░  NOTIFICATION SYSTEM  ░░░
+// ═══════════════════════════════════════════════════════════
+let notifUnsubscribe = () => {};
+
+const NOTIF_ICONS = {
+  trade_offer:    { bg:'bg-emerald-100 dark:bg-emerald-900/40', icon:'🔄' },
+  trade_accepted: { bg:'bg-emerald-100 dark:bg-emerald-900/40', icon:'✅' },
+  purchase:       { bg:'bg-vit-100 dark:bg-vit-900/40',        icon:'🛒' },
+  price_offer:    { bg:'bg-amber-100 dark:bg-amber-900/40',    icon:'💰' },
+  default:        { bg:'bg-gray-100 dark:bg-gray-800',         icon:'🔔' }
+};
+
+// Write a notification document for a target user
+const sendNotification = async (targetUid, { type, title, body, productId }) => {
+  if (!targetUid || targetUid === currentUser?.uid) return; // don't notify yourself
+  try {
+    await db.collection('notifications').add({
+      uid: targetUid,
+      type: type || 'default',
+      title,
+      body,
+      productId: productId || null,
+      read: false,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch(e) { console.warn('sendNotification failed:', e.message); }
+};
+
+// Start listening for current user's notifications
+const startNotifListener = () => {
+  if (!currentUser) return;
+  notifUnsubscribe();
+  notifUnsubscribe = db.collection('notifications')
+    .where('uid', '==', currentUser.uid)
+    .orderBy('createdAt', 'desc')
+    .limit(30)
+    .onSnapshot(snap => {
+      const notifs = snap.docs.map(d => ({id: d.id, ...d.data()}));
+      const unread = notifs.filter(n => !n.read).length;
+      updateNotifBadge(unread);
+      renderNotifList(notifs);
+    }, err => console.warn('Notif listener error:', err.code));
+};
+
+const updateNotifBadge = (count) => {
+  const badge = document.getElementById('notif-unread-badge');
+  if (!badge) return;
+  badge.style.display = count > 0 ? 'flex' : 'none';
+  badge.textContent = count > 9 ? '9+' : String(count);
+};
+
+const renderNotifList = (notifs) => {
+  const list = document.getElementById('notif-list');
+  if (!list) return;
+  if (!notifs.length) {
+    list.innerHTML = '<p class="text-center text-gray-400 text-sm py-8">You're all caught up! 🎉</p>';
+    return;
+  }
+  list.innerHTML = notifs.map(n => {
+    const meta = NOTIF_ICONS[n.type] || NOTIF_ICONS.default;
+    const ts = n.createdAt ? timeAgoStr(n.createdAt.toDate ? n.createdAt.toDate() : new Date()) : '';
+    return `<div class="notif-item ${n.read ? '' : 'unread'}" data-notif-id="${n.id}" data-product-id="${n.productId || ''}">
+      <div class="notif-icon-box ${meta.bg}">${meta.icon}</div>
+      <div class="flex-grow min-w-0">
+        <p class="font-bold text-sm text-gray-900 dark:text-white">${n.title}</p>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">${n.body}</p>
+        <p class="text-xs text-gray-300 dark:text-gray-600 mt-1">${ts}</p>
+      </div>
+      ${!n.read ? '<div class="notif-dot flex-shrink-0"></div>' : ''}
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.notif-item').forEach(item => {
+    item.addEventListener('click', async () => {
+      // Mark as read
+      if (!item.classList.contains('read')) {
+        db.collection('notifications').doc(item.dataset.notifId).update({ read: true }).catch(() => {});
+        item.classList.remove('unread');
+        item.querySelector('.notif-dot')?.remove();
+      }
+      // Navigate to product if applicable
+      const pid = item.dataset.productId;
+      if (pid) {
+        const p = products.find(x => x.id === pid);
+        if (p) { renderProductDetailPage(p); setActiveTab('product-detail'); }
+        else setActiveTab('buy');
+      }
+      closeNotifDropdown();
+    });
+  });
+};
+
+const openNotifDropdown = () => {
+  const dd = document.getElementById('notif-dropdown');
+  if (!dd) return;
+  dd.classList.add('open');
+};
+const closeNotifDropdown = () => {
+  document.getElementById('notif-dropdown')?.classList.remove('open');
+};
+
+// Bell button toggle
+document.body.addEventListener('click', e => {
+  const bell = e.target.closest('#notif-bell-btn');
+  if (bell) { e.stopPropagation(); document.getElementById('notif-dropdown')?.classList.contains('open') ? closeNotifDropdown() : openNotifDropdown(); return; }
+  // Mark all read button
+  if (e.target.id === 'mark-all-read-btn') {
+    e.stopPropagation();
+    db.collection('notifications').where('uid','==',currentUser?.uid).where('read','==',false).get()
+      .then(snap => {
+        const batch = db.batch();
+        snap.docs.forEach(d => batch.update(d.ref, {read: true}));
+        return batch.commit();
+      }).catch(() => {});
+    return;
+  }
+  // Close dropdown when clicking outside
+  if (!e.target.closest('#notif-dropdown') && !e.target.closest('#notif-bell-btn')) {
+    closeNotifDropdown();
+  }
+});
+
+// ── Wire notifications into existing buy/trade flows ─────────────────────
+
+// Patch handleTradeOfferSubmit to notify seller
+const _origHandleTradeOfferSubmit = handleTradeOfferSubmit;
+document.body.addEventListener('submit', async e => {
+  if (e.target.id !== 'trade-offer-form') return;
+  // notification is sent after the offer is saved (after the original handler runs)
+  const productId = e.target.dataset.productId;
+  const product = products.find(p => p.id === productId);
+  if (product && product.sellerId !== currentUser?.uid) {
+    setTimeout(async () => {
+      await sendNotification(product.sellerId, {
+        type: 'trade_offer',
+        title: '🔄 New Trade Offer!',
+        body: `${currentUser.displayName || 'Someone'} made a trade offer on "${product.name}".`,
+        productId
+      });
+    }, 800);
+  }
+}, true); // capture phase so it fires before the submit handler
+
+// Patch handleCheckout to notify sellers of purchases
+const _origHandleCheckout = handleCheckout;
+window._afterCheckoutNotify = async (purchasedItems) => {
+  for (const item of purchasedItems) {
+    const p = products.find(x => x.id === item.id || x.id === item.productId);
+    if (p && p.sellerId && p.sellerId !== currentUser?.uid) {
+      await sendNotification(p.sellerId, {
+        type: 'purchase',
+        title: '🛒 Item Sold!',
+        body: `Your listing "${p.name}" was purchased by ${currentUser.displayName || 'a buyer'}.`,
+        productId: p.id
+      });
+    }
+  }
+};
+
+// Patch price offer submission to notify seller
+const _origPriceOfferClick = window.renderPriceOfferModal;
+window.renderPriceOfferModal = (product) => {
+  _origPriceOfferClick(product);
+  // patch the submit button inside the modal after it renders
+  setTimeout(() => {
+    const origClick = document.getElementById('submit-price-offer-btn')?.onclick;
+    const submitBtn = document.getElementById('submit-price-offer-btn');
+    if (submitBtn && product) {
+      const prevOnClick = submitBtn.onclick;
+      submitBtn.onclick = async (...args) => {
+        if (prevOnClick) await prevOnClick(...args);
+        // notify seller
+        if (product.sellerId !== currentUser?.uid) {
+          setTimeout(() => sendNotification(product.sellerId, {
+            type: 'price_offer',
+            title: '💰 New Price Offer!',
+            body: `${currentUser.displayName || 'Someone'} offered ₹${document.getElementById('offer-price-input')?.value || '?'} for "${product.name}".`,
+            productId: product.id
+          }), 600);
+        }
+      };
+    }
+  }, 50);
+};
+
+// Start notif listener when user logs in
+document.addEventListener('vitmart-user-ready', () => { startNotifListener(); });
+if (currentUser) startNotifListener();
 
 });
 </script>
