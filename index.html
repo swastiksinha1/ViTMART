@@ -2016,7 +2016,23 @@ const renderLostAndFoundModal = (reportType='lost') => {
 };
 
 // --- Orders ---
-const renderOrdersPage = () => {
+const renderOrdersPage = (freshOrders) => {
+  // Safety net: if orders array is empty, try a direct Firestore fetch first.
+  // The onSnapshot listener handles real-time, but there can be a brief window
+  // (e.g. immediately after checkout) where orders is not yet updated.
+  if (!freshOrders && orders.length === 0) {
+    db.collection('orders').where('userId','==',currentUser.uid).get()
+      .then(snap => {
+        if (!snap.empty) {
+          orders = snap.docs
+            .map(d => ({id:d.id,...d.data()}))
+            .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+        }
+        renderOrdersPage(orders);
+      })
+      .catch(() => renderOrdersPage(orders || []));
+    return;
+  }
   const c = document.getElementById('orders-tab');
   let html = `
     ${getBackButtonHTML()}
@@ -2588,8 +2604,10 @@ const handleCheckout = async () => {
     await batch.commit();
     checkoutModal.classList.remove('show');
     triggerConfetti();
-    showMessage('Purchase complete! 🎉','success');
-    setActiveTab('orders');
+    showMessage('Purchase complete! 🎉 Redirecting to your orders…','success');
+    // Wait for the onSnapshot listener to pick up the new order, then navigate.
+    // Using a short timeout so Firestore has time to push the update.
+    setTimeout(() => setActiveTab('orders'), 1200);
   } catch(e) { showMessage('Payment failed: '+(e.message||e.code||'Unknown error. Check your connection.'),'error'); console.error('Checkout error:',e); }
   finally { btn.disabled=false; btn.innerHTML='Pay Now'; }
 };
@@ -2745,10 +2763,25 @@ auth.onAuthStateChanged(user => {
       snap.forEach(d => { cart[d.id]={id:d.id,...d.data()}; });
       renderCart();
     });
-    ordersUnsubscribe = db.collection('orders').where('userId','==',currentUser.uid).orderBy('createdAt','desc').onSnapshot(snap => {
-      orders = snap.docs.map(d=>({id:d.id,...d.data()}));
+    ordersUnsubscribe = db.collection('orders').where('userId','==',currentUser.uid).onSnapshot(snap => {
+      // Sort client-side — avoids needing a composite Firestore index on userId+createdAt
+      orders = snap.docs
+        .map(d => ({id:d.id,...d.data()}))
+        .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+      // FIX: re-render whichever tab is currently showing orders or manage history
       const at = document.querySelector('.tab-content.active');
-      if (at&&at.id==='orders-tab') renderOrdersPage();
+      if (at && at.id === 'orders-tab') renderOrdersPage();
+      if (at && at.id === 'manage-tab') renderManagePage();
+    }, err => {
+      console.error('Orders listener error:', err.code, err.message);
+      // Fallback: fetch once if realtime listener fails
+      db.collection('orders').where('userId','==',currentUser.uid).get().then(snap => {
+        orders = snap.docs
+          .map(d => ({id:d.id,...d.data()}))
+          .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+        const at = document.querySelector('.tab-content.active');
+        if (at && at.id === 'orders-tab') renderOrdersPage();
+      }).catch(e => console.error('Orders fallback fetch failed:', e));
     });
     lostAndFoundUnsubscribe = db.collection('lost_and_found').orderBy('createdAt','desc').onSnapshot(snap => {
       lostAndFoundItems = snap.docs.map(d=>({id:d.id,...d.data()}));
@@ -3426,10 +3459,25 @@ const timeAgoStr = (date) => {
 // ══════════════════════════════════════════════
 // NEW FEATURE: MANAGE & CLEANUP PAGE
 // ══════════════════════════════════════════════
-const renderManagePage = () => {
+const renderManagePage = (freshOrders) => {
   if (!currentUser) { showMessage('Sign in to manage your data.','error'); setActiveTab('home'); return; }
+  // If called without pre-fetched orders, do a fresh Firestore fetch first.
+  // This ensures manage page always shows the latest purchases even if
+  // the onSnapshot hasn't fired yet (e.g. immediately after checkout).
+  if (!freshOrders) {
+    db.collection('orders').where('userId','==',currentUser.uid).get()
+      .then(snap => {
+        const fetched = snap.docs
+          .map(d => ({id:d.id,...d.data()}))
+          .sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+        // Merge: take whichever is newer/longer
+        if (fetched.length >= orders.length) orders = fetched;
+        renderManagePage(orders); // recurse with fresh data
+      })
+      .catch(() => renderManagePage(orders || [])); // fallback on error
+    return; // exit — will re-enter with fresh data
+  }
   const c = document.getElementById('manage-tab');
-
   const myProducts = products.filter(p => p.sellerId === currentUser.uid);
   const soldProducts = myProducts.filter(p => p.status==='sold'||p.status==='traded');
   const activeProducts = myProducts.filter(p => p.status==='available');
