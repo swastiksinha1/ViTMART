@@ -4676,7 +4676,7 @@ const renderNotifList = (notifs) => {
   const list = document.getElementById('notif-list');
   if (!list) return;
   if (!notifs.length) {
-    list.innerHTML = '<p class="text-center text-gray-400 text-sm py-8">You're all caught up! 🎉</p>';
+    list.innerHTML = '<p class="text-center text-gray-400 text-sm py-8">You\'re all caught up! 🎉</p>';
     return;
   }
   list.innerHTML = notifs.map(n => {
