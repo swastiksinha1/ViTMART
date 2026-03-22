@@ -2590,7 +2590,7 @@ const handleCheckout = async () => {
     triggerConfetti();
     showMessage('Purchase complete! 🎉','success');
     setActiveTab('orders');
-  } catch(e) { showMessage('Payment failed: '+e.message,'error'); }
+  } catch(e) { showMessage('Payment failed: '+(e.message||e.code||'Unknown error. Check your connection.'),'error'); console.error('Checkout error:',e); }
   finally { btn.disabled=false; btn.innerHTML='Pay Now'; }
 };
 
