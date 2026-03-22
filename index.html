@@ -2422,6 +2422,40 @@ const renderAuthModal = (view='signin') => {
       </button>
     </div>`;
 
+  if (view==='forgot-password') {
+    authModalContent.innerHTML = `
+      <div class="text-center">
+        <div class="w-16 h-16 bg-gradient-to-br from-amber-400 to-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4 text-3xl shadow-xl shadow-amber-500/30">🔑</div>
+        <h2 class="text-2xl font-black font-syne text-gray-900 dark:text-white">Reset Password</h2>
+        <p class="text-gray-500 mt-2 mb-6 text-sm leading-relaxed">Enter your registered email address and we'll send you a password reset link.</p>
+        <form id="forgot-password-form" class="space-y-4" novalidate>
+          <input type="email" id="forgot-email" placeholder="Your registered email" class="vit-input" required autocomplete="email">
+          <button type="submit" id="send-reset-btn" class="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-xl font-bold shimmer-btn shadow-lg shadow-amber-500/30">
+            Send Reset Link 📧
+          </button>
+        </form>
+        <button id="show-signin" class="w-full py-3 glass rounded-xl font-bold hover:-translate-y-0.5 transition-transform mt-3">← Back to Sign In</button>
+      </div>`;
+    authModalContent.querySelector('#forgot-email')?.focus();
+    authModalContent.querySelector('#forgot-password-form').addEventListener('submit', handleForgotPassword);
+    return;
+  }
+
+  if (view==='reset-sent') {
+    authModalContent.innerHTML = `
+      <div class="text-center">
+        <div class="w-16 h-16 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-4 text-3xl shadow-xl shadow-emerald-500/30">✅</div>
+        <h2 class="text-2xl font-black font-syne text-gray-900 dark:text-white">Email Sent!</h2>
+        <p class="text-gray-500 mt-2 mb-2 text-sm leading-relaxed">A password reset link has been sent to your email address.</p>
+        <p class="text-gray-400 text-xs mb-6">Check your <strong>spam/junk folder</strong> too. The link expires in 1 hour.</p>
+        <div class="space-y-3">
+          <button id="show-signin" class="w-full py-3 bg-gradient-to-r from-vit-600 to-vit-700 text-white rounded-xl font-bold shimmer-btn shadow-lg shadow-vit-500/30">Back to Sign In</button>
+          <button id="show-forgot-password" class="w-full py-2 text-sm text-gray-400 hover:text-vit-500 transition-colors">Didn't receive it? Send again</button>
+        </div>
+      </div>`;
+    return;
+  }
+
   if (view==='verify') {
     authModalContent.innerHTML = `
       <div class="text-center">
@@ -2458,7 +2492,8 @@ const renderAuthModal = (view='signin') => {
     </form>
     <p class="text-center text-sm text-gray-400 mt-5">
       ${view==='signin'?`No account? <button id="show-signup" class="font-bold text-vit-600 dark:text-vit-400 hover:underline">Sign up free</button>`:`Already a member? <button id="show-signin" class="font-bold text-vit-600 dark:text-vit-400 hover:underline">Sign in</button>`}
-    </p>`;
+    </p>
+    ${view==='signin'?`<p class="text-center mt-3"><button id="show-forgot-password" class="text-xs text-gray-400 hover:text-vit-500 dark:hover:text-vit-400 transition-colors">Forgot your password?</button></p>`:''}`;
   authModalContent.querySelector('input:not([type=hidden])')?.focus();
 };
 
@@ -2610,11 +2645,17 @@ const renderPopupChat = () => {
         <div class="flex items-center gap-3">
           <div style="width:36px;height:36px;background:rgba(255,255,255,0.15);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px">⚡</div>
           <div>
-            <h3 class="text-sm font-bold text-white">ViT Assistant</h3>
-            <div class="flex items-center gap-1.5"><div style="width:6px;height:6px;background:#34d399;border-radius:50%"></div><p class="text-xs text-vit-300">Online · 31 topics</p></div>
+            <div class="flex items-center gap-2">
+              <h3 class="text-sm font-bold text-white">ViT Assistant</h3>
+              <span style="background:rgba(255,255,255,0.18);color:white;font-size:9px;font-weight:800;padding:1px 6px;border-radius:99px;letter-spacing:0.06em">AI</span>
+            </div>
+            <div class="flex items-center gap-1.5"><div style="width:6px;height:6px;background:#34d399;border-radius:50%"></div><p class="text-xs text-vit-300">Powered by Claude · Knows your session</p></div>
           </div>
         </div>
-        <button id="close-popup-chat-btn" class="text-white/60 hover:text-white text-2xl w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors">&times;</button>
+        <div class="flex items-center gap-1">
+          <button id="clear-chat-btn" title="Clear conversation" class="text-white/50 hover:text-white w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors" style="font-size:14px">🗑</button>
+          <button id="close-popup-chat-btn" class="text-white/60 hover:text-white text-2xl w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors">&times;</button>
+        </div>
       </div>
       <div id="popup-chat-messages" class="flex-grow p-4 overflow-y-auto space-y-3 flex flex-col" style="min-height:0">
         <div class="bot-bubble max-w-[88%] p-3 rounded-2xl rounded-tl-sm text-sm self-start" style="opacity:0;transform:translateY(8px);transition:opacity 0.25s,transform 0.25s">
@@ -2661,17 +2702,169 @@ const renderPopupChat = () => {
   }
 };
 
-const handlePopupSendMessage = (e) => {
+// ─── AI Chatbot — conversation state ────────────────────────────────────────
+const aiChatHistory = [];  // [{role:'user'|'assistant', content:'...'}]
+let aiChatBusy = false;
+
+// Build live context snapshot of the user's current session
+const buildLiveContext = () => {
+  const cartCount   = Object.keys(cart).length;
+  const cartTotal   = Object.values(cart).reduce((s,i) => s+i.price*i.quantity, 0);
+  const myListings  = products.filter(p => p.sellerId === currentUser?.uid);
+  const avail       = myListings.filter(p => p.status==='available');
+  const totalAvail  = products.filter(p => p.status==='available').length;
+  const wl          = JSON.parse(localStorage.getItem('vitmart_wishlist')||'[]');
+  const recEvents   = JSON.parse(localStorage.getItem('vm_rec_events')||'[]');
+  const topCats     = Object.entries(
+    recEvents.reduce((acc,e)=>{ acc[e.category]=(acc[e.category]||0)+1; return acc; }, {})
+  ).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>x[0]).join(', ');
+
+  return `
+LIVE SESSION DATA (use this to give personalised answers):
+- User: ${currentUser ? `${currentUser.displayName} <${currentUser.email}>` : 'Not signed in'}
+- Cart: ${cartCount} item(s), total ₹${cartTotal.toFixed(0)}
+- My active listings: ${avail.length} / ${myListings.length} total
+- Marketplace: ${totalAvail} items currently available
+- Wishlist: ${wl.length} saved item(s)
+- Orders history: ${orders.length} order(s)
+- Top browsed categories: ${topCats || 'none yet'}
+- Recent orders: ${orders.slice(0,3).map(o=>`Order ₹${o.total?.toFixed(0)} (${o.createdAt?.toDate?.().toLocaleDateString?.() || 'recent'})`).join(', ') || 'none'}
+- Theme: ${document.documentElement.classList.contains('dark') ? 'dark' : 'light'} mode`.trim();
+};
+
+// Navigation actions the AI can trigger — returned as special tags in response
+const processAIActions = (text) => {
+  // The AI can embed [NAV:tabname] to navigate and [SEARCH:query] to search
+  const navMatch = text.match(/\[NAV:([a-z-]+)\]/i);
+  const searchMatch = text.match(/\[SEARCH:([^\]]+)\]/i);
+  const themeMatch  = text.match(/\[THEME\]/i);
+
+  let cleaned = text
+    .replace(/\[NAV:[a-z-]+\]/gi, '')
+    .replace(/\[SEARCH:[^\]]+\]/gi, '')
+    .replace(/\[THEME\]/gi, '')
+    .trim();
+
+  if (themeMatch) {
+    setTimeout(() => { toggleTheme(); }, 400);
+  }
+  if (navMatch) {
+    const tab = navMatch[1].toLowerCase();
+    const validTabs = ['home','buy','sell','trade','lost-and-found','my-listings','orders','profile','reviews','noticeboard','manage'];
+    if (validTabs.includes(tab)) {
+      setTimeout(() => { setActiveTab(tab); closeChatUI(); }, 600);
+    }
+  }
+  if (searchMatch) {
+    const q = searchMatch[1];
+    setTimeout(() => {
+      setActiveTab('buy');
+      setTimeout(() => {
+        const s = document.querySelector('#buy-tab #search-input');
+        if (s) { s.value = q; s.dispatchEvent(new Event('input')); }
+        closeChatUI();
+      }, 200);
+    }, 400);
+  }
+  return cleaned;
+};
+
+// Append a bot bubble to the messages area
+const appendBotBubble = (html, msgs) => {
+  const botEl = document.createElement('div');
+  botEl.className = 'bot-bubble max-w-[88%] p-3 rounded-2xl rounded-tl-sm text-sm self-start leading-relaxed';
+  botEl.style.cssText = 'opacity:0;transform:translateY(6px);transition:opacity 0.2s,transform 0.2s';
+  botEl.innerHTML = html;
+  msgs.appendChild(botEl);
+  msgs.scrollTop = msgs.scrollHeight;
+  requestAnimationFrame(() => { botEl.style.opacity='1'; botEl.style.transform='translateY(0)'; });
+  return botEl;
+};
+
+// Format markdown-ish text to HTML
+const formatBotText = (text) =>
+  text
+    .replace(/\*\*(.*?)\*\*/g, '<strong class="text-vit-600 dark:text-vit-400">$1</strong>')
+    .replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 bg-vit-100 dark:bg-vit-900/40 text-vit-700 dark:text-vit-300 rounded text-xs font-mono">$1</code>')
+    .replace(/\n/g, '<br>');
+
+// ─── VITMART SYSTEM PROMPT ────────────────────────────────────────────────────
+const VITMART_SYSTEM_PROMPT = `You are ViT Assistant, an intelligent, friendly campus marketplace guide built into ViTMART — a student-exclusive buy/sell/trade platform for VIT (Vellore Institute of Technology) students.
+
+PERSONALITY: Warm, helpful, concise, slightly witty. You speak like a knowledgeable senior student, not a corporate chatbot. Use Indian English naturally. Keep responses focused — 3-6 sentences unless a step-by-step is genuinely needed.
+
+VITMART PLATFORM KNOWLEDGE:
+- Buy: Browse available listings, filter by category/price, add to cart, checkout (simulated payment, real cash/UPI meetup on campus)
+- Sell: Upload photo, fill name/description/price/category, optionally allow trade offers, list instantly
+- Trade/Barter: Items marked with 🔄 accept trade offers — exchange items without money
+- Price Negotiation: Buyers can "Make a Price Offer" on any item. Seller can accept / counter / reject. Counter prices are PRIVATE — they never change the public listing price.
+- Noticeboard: Campus bulletin board — post "Want to Buy", "Selling", "Need Help", or "General" notices. Anyone can reply in real-time.
+- Lost & Found: Report lost/found items with photo, description, location. Contact via email. Mark resolved when done.
+- Reviews: 1-5 star ratings for sellers/items/platform. Anonymous option available. Immutable once posted.
+- Notifications: Bell icon shows real-time alerts for purchases, trade offers, price offers, trade accepted.
+- Recommendations: Learns from browse, wishlist, cart adds, purchases. Shows personalised picks on Buy and Home pages.
+- Wishlist: Heart icon on any card saves the item. Boosts recommendations.
+- Manage: Delete old listings (bulk), clear order history, manage wishlist, clear browse data.
+- Dark Mode: Moon/sun icon in header, or ask me to toggle it.
+- Command Palette: ⌘K (Mac) or Ctrl+K (Windows) for quick navigation.
+- Profile: Change name, picture, password. All updates sync to all your listings.
+- Payments: Checkout flow is simulated — real payment happens in-person via cash/UPI/GPay at campus meetup.
+- Close Listing: ⊘ icon hides a listing without deleting it. Can be re-opened.
+- Edit Price: ✏️ button on seller's product detail changes the listing price.
+
+NAVIGATION ACTIONS (embed these exactly in your reply when you want to navigate):
+- To navigate: include [NAV:tabname] where tabname is one of: home, buy, sell, trade, lost-and-found, my-listings, orders, profile, reviews, noticeboard, manage
+- To search: include [SEARCH:query] to open Buy page and search
+- To toggle theme: include [THEME]
+Only use ONE navigation action per response. Never show the raw tag to the user — it's processed automatically.
+
+TONE RULES:
+- Be direct. Skip "Great question!" filler.
+- If the user asks a question you can answer from context, answer it.
+- If navigation helps, use a NAV action.
+- Format with **bold** for important terms. Use emoji sparingly but effectively.
+- Keep step-by-step lists short (3-5 steps max).
+- If something isn't in ViTMART, say so honestly.
+- You can see the user's live session data (cart, listings, orders) — use it to personalise answers.
+
+CAMPUS CONTEXT:
+- All transactions are in-person on campus — no shipping
+- Good meetup spots: Library lobby, Cafeteria, Hostels, Academic blocks
+- Admin: Swastik Sinha (swastiksinha001@gmail.com)
+- Platform only for verified VIT student emails`;
+
+// ─── Main AI send handler ─────────────────────────────────────────────────────
+const handlePopupSendMessage = async (e) => {
   e.preventDefault();
+  if (aiChatBusy) return;
+
   const input = document.getElementById('popup-chat-input');
-  const msgs = document.getElementById('popup-chat-messages');
-  if (!input||!msgs) return;
+  const msgs  = document.getElementById('popup-chat-messages');
+  if (!input || !msgs) return;
   const text = input.value.trim();
   if (!text) return;
   const filtered = filterProfanity(text);
   input.value = '';
+  input.disabled = true;
 
-  // User message bubble
+  // ── Check for keyword shortcut actions first (navigation, search, theme) ─────
+  // These respond instantly without an API call
+  let quickReply = null;
+  for (const intent of chatbotIntents) {
+    for (const kw of intent.keywords) {
+      if (filtered.match(kw)) {
+        const result = intent.handler(filtered);
+        // If it's a navigation intent, just do it — no API needed
+        if (['navigate','dark_mode','search'].includes(intent.name)) {
+          quickReply = result;
+        }
+        break;
+      }
+    }
+    if (quickReply) break;
+  }
+
+  // User bubble
   const userEl = document.createElement('div');
   userEl.className = 'max-w-[80%] p-3 rounded-2xl rounded-tr-sm bg-gradient-to-br from-vit-600 to-vit-700 text-white text-sm self-end';
   userEl.style.cssText = 'opacity:0;transform:translateX(10px);transition:opacity 0.15s,transform 0.15s';
@@ -2680,37 +2873,97 @@ const handlePopupSendMessage = (e) => {
   msgs.scrollTop = msgs.scrollHeight;
   requestAnimationFrame(() => { userEl.style.opacity='1'; userEl.style.transform='translateX(0)'; });
 
+  // If quickReply (navigation/search/theme), show it and skip API call
+  if (quickReply) {
+    const typingEl = document.createElement('div');
+    typingEl.className = 'bot-bubble max-w-[80%] p-3 rounded-2xl rounded-tl-sm text-sm self-start flex items-center gap-1.5';
+    typingEl.innerHTML = `<span class="w-2 h-2 bg-vit-400 rounded-full animate-bounce" style="animation-delay:0ms"></span><span class="w-2 h-2 bg-vit-400 rounded-full animate-bounce" style="animation-delay:150ms"></span><span class="w-2 h-2 bg-vit-400 rounded-full animate-bounce" style="animation-delay:300ms"></span>`;
+    msgs.appendChild(typingEl);
+    msgs.scrollTop = msgs.scrollHeight;
+    setTimeout(() => {
+      typingEl.remove();
+      appendBotBubble(formatBotText(quickReply), msgs);
+      input.disabled = false; input.focus();
+    }, 350);
+    aiChatHistory.push({ role:'user', content: filtered });
+    aiChatHistory.push({ role:'assistant', content: quickReply });
+    return;
+  }
+
+  // ── AI-powered response ───────────────────────────────────────────────────────
+  aiChatBusy = true;
+  aiChatHistory.push({ role:'user', content: filtered });
+
   // Typing indicator
   const typingEl = document.createElement('div');
-  typingEl.className = 'bot-bubble max-w-[80%] p-3 rounded-2xl rounded-tl-sm text-sm self-start flex items-center gap-1.5';
-  typingEl.innerHTML = `<span class="w-2 h-2 bg-vit-400 rounded-full animate-bounce" style="animation-delay:0ms"></span><span class="w-2 h-2 bg-vit-400 rounded-full animate-bounce" style="animation-delay:150ms"></span><span class="w-2 h-2 bg-vit-400 rounded-full animate-bounce" style="animation-delay:300ms"></span>`;
+  typingEl.className = 'bot-bubble max-w-[80%] p-3 rounded-2xl rounded-tl-sm text-sm self-start flex items-center gap-2';
+  typingEl.innerHTML = `
+    <div class="flex gap-1">
+      <span class="w-2 h-2 bg-vit-400 rounded-full animate-bounce" style="animation-delay:0ms"></span>
+      <span class="w-2 h-2 bg-vit-400 rounded-full animate-bounce" style="animation-delay:150ms"></span>
+      <span class="w-2 h-2 bg-vit-400 rounded-full animate-bounce" style="animation-delay:300ms"></span>
+    </div>
+    <span class="text-xs text-gray-400">AI thinking…</span>`;
   msgs.appendChild(typingEl);
   msgs.scrollTop = msgs.scrollHeight;
 
-  // Match intent immediately (no delay for matching)
-  let reply; let found = false;
-  for (const intent of chatbotIntents) {
-    for (const kw of intent.keywords) {
-      if (filtered.match(kw)) { reply = intent.handler(filtered); found = true; break; }
-    }
-    if (found) break;
-  }
-  if (!found) reply = `Hmm, I didn\'t quite catch that. 🤔\n\nTry:\n- **"How do I sell an item?"**\n- **"Find a laptop under ₹8000"**\n- **"How do price offers work?"**\n- **"What is the noticeboard?"**\n\nOr type **help** for the full list.`;
+  try {
+    const liveCtx = buildLiveContext();
+    // Build messages for Claude — inject live context as a system-like user message
+    const apiMessages = [
+      ...aiChatHistory.slice(-12),  // last 6 turns
+    ];
+    // Prepend live context to the latest user message
+    apiMessages[apiMessages.length - 1] = {
+      role: 'user',
+      content: `[LIVE CONTEXT]\n${liveCtx}\n\n[USER MESSAGE]\n${filtered}`
+    };
 
-  // Show typing for a natural feel (shorter = snappier)
-  const typingDelay = Math.min(400 + reply.length * 0.8, 900);
-  setTimeout(() => {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 600,
+        system: VITMART_SYSTEM_PROMPT,
+        messages: apiMessages
+      })
+    });
+
+    if (!res.ok) throw new Error(`API ${res.status}`);
+    const data = await res.json();
+    const rawReply = data.content?.[0]?.text || 'Sorry, I had trouble responding. Please try again!';
+
     typingEl.remove();
-    const botEl = document.createElement('div');
-    botEl.className = 'bot-bubble max-w-[85%] p-3 rounded-2xl rounded-tl-sm text-sm self-start leading-relaxed';
-    botEl.style.cssText = 'opacity:0;transform:translateY(6px);transition:opacity 0.2s,transform 0.2s';
-    botEl.innerHTML = reply
-      .replace(/\*\*(.*?)\*\*/g, '<strong class="text-vit-600 dark:text-vit-400">$1</strong>')
-      .replace(/\n/g, '<br>');
-    msgs.appendChild(botEl);
-    msgs.scrollTop = msgs.scrollHeight;
-    requestAnimationFrame(() => { botEl.style.opacity='1'; botEl.style.transform='translateY(0)'; });
-  }, typingDelay);
+
+    // Process any embedded action tags
+    const cleanReply = processAIActions(rawReply);
+
+    aiChatHistory.push({ role:'assistant', content: cleanReply });
+    // Keep history bounded
+    if (aiChatHistory.length > 20) aiChatHistory.splice(0, 2);
+
+    appendBotBubble(formatBotText(cleanReply), msgs);
+
+  } catch (err) {
+    typingEl.remove();
+    console.warn('AI chat error:', err);
+    // Fallback: try keyword match, then generic error
+    let fallback = null;
+    for (const intent of chatbotIntents) {
+      for (const kw of intent.keywords) {
+        if (filtered.match(kw)) { fallback = intent.handler(filtered); break; }
+      }
+      if (fallback) break;
+    }
+    const errReply = fallback || `Hmm, I'm having trouble connecting right now. 🤔\n\nFor quick help, try:\n- **"How do I sell?"** · **"How do I buy?"**\n- **"Find [item]"** to search\n\nOr check the **Help** section in the menu!`;
+    aiChatHistory.push({ role:'assistant', content: errReply });
+    appendBotBubble(formatBotText(errReply), msgs);
+  } finally {
+    aiChatBusy = false;
+    input.disabled = false;
+    input.focus();
+  }
 };
 
 // --- Auth Logic ---
@@ -2738,6 +2991,39 @@ const handleSignIn = async (e) => {
     const uc = await auth.signInWithEmailAndPassword(email, password);
     if (!uc.user.emailVerified) showMessage('Please verify your email to continue.','error');
   } catch(e) { showMessage(e.message,'error'); }
+};
+
+const handleForgotPassword = async (e) => {
+  e.preventDefault();
+  const emailInput = document.getElementById('forgot-email');
+  const email = emailInput?.value?.trim();
+  if (!email) { showMessage('Please enter your email address.','error'); return; }
+
+  const btn = authModalContent.querySelector('#send-reset-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<div class="animate-spin rounded-full h-5 w-5 border-b-2 border-white mx-auto"></div>';
+  }
+
+  try {
+    await auth.sendPasswordResetEmail(email, {
+      url: window.location.href,  // redirect back to the site after reset
+      handleCodeInApp: false
+    });
+    renderAuthModal('reset-sent');
+  } catch(err) {
+    // Be specific about errors without leaking account existence
+    let msg = 'Failed to send reset email. Please try again.';
+    if (err.code === 'auth/user-not-found') {
+      msg = 'No account found with that email address. Check for typos or sign up.';
+    } else if (err.code === 'auth/invalid-email') {
+      msg = 'Please enter a valid email address.';
+    } else if (err.code === 'auth/too-many-requests') {
+      msg = 'Too many requests. Please wait a minute before trying again.';
+    }
+    showMessage(msg, 'error');
+    if (btn) { btn.disabled = false; btn.innerHTML = 'Send Reset Link 📧'; }
+  }
 };
 
 const handleResendVerification = async () => {
@@ -3187,6 +3473,7 @@ document.body.addEventListener('click', e => {
   if (e.target.id==='go-back-btn') { handleGoBack(); return; }
   if (e.target.id==='show-signup') renderAuthModal('signup');
   if (e.target.id==='show-signin') renderAuthModal('signin');
+  if (e.target.id==='show-forgot-password') renderAuthModal('forgot-password');
   if (e.target.id==='sign-in-btn') { authModal.classList.add('show'); authModal.querySelector('input')?.focus(); }
   if (e.target.id==='sign-out-btn'||e.target.closest('#sign-out-btn')) handleSignOut();
   if (e.target.id==='resend-verification-btn') handleResendVerification();
@@ -3251,9 +3538,24 @@ document.body.addEventListener('click', e => {
 
   const ocBtn = e.target.closest('#open-popup-chat-btn');
   const ccBtn = e.target.closest('#close-popup-chat-btn');
+  const clrBtn = e.target.closest('#clear-chat-btn');
   const pcC = document.getElementById('popup-chat-container');
   if (ocBtn) { pcC?.classList.add('open'); ocBtn.classList.add('hidden'); }
   if (ccBtn) { pcC?.classList.remove('open'); document.getElementById('open-popup-chat-btn')?.classList.remove('hidden'); }
+  if (clrBtn) {
+    // Clear conversation history + messages DOM
+    aiChatHistory.length = 0;
+    const msgs = document.getElementById('popup-chat-messages');
+    if (msgs) {
+      msgs.innerHTML = '';
+      const wb = document.createElement('div');
+      wb.className = 'bot-bubble max-w-[88%] p-3 rounded-2xl rounded-tl-sm text-sm self-start';
+      wb.style.cssText = 'opacity:0;transform:translateY(8px);transition:opacity 0.25s,transform 0.25s';
+      wb.innerHTML = 'Conversation cleared! ⚡ How can I help you?';
+      msgs.appendChild(wb);
+      requestAnimationFrame(() => { wb.style.opacity='1'; wb.style.transform='translateY(0)'; });
+    }
+  }
 
   const alfBtn = e.target.closest('.add-lost-found-btn');
   if (alfBtn) { renderLostAndFoundModal(alfBtn.dataset.type); return; }
@@ -3296,6 +3598,7 @@ document.body.addEventListener('submit', e => {
   const id = e.target.id;
   if (id==='signup-form') handleSignUp(e);
   else if (id==='signin-form') handleSignIn(e);
+  else if (id==='forgot-password-form') handleForgotPassword(e);
   else if (id==='add-product-form') addProduct(e);
   else if (id==='update-profile-form') handleUpdateProfile(e);
   else if (id==='popup-chat-form') handlePopupSendMessage(e);
