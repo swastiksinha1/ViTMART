@@ -9,11 +9,26 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>ViTMART - The Ultimate Student Marketplace</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
-<script src="https://cdn.tailwindcss.com"></script>
+<!-- Preconnect to all external origins so DNS/TLS is ready early -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Cabinet+Grotesk:wght@400;500;700;800;900&family=Instrument+Serif:ital@0;1&display=swap&font-display=swap" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,700;0,800;1,700&display=swap&font-display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://www.gstatic.com">
+<link rel="preconnect" href="https://firestore.googleapis.com">
+<link rel="preconnect" href="https://res.cloudinary.com">
+<link rel="dns-prefetch" href="https://www.gstatic.com">
+<link rel="dns-prefetch" href="https://firestore.googleapis.com">
+
+<!-- Tailwind CDN (kept for now — replace with build step for production) -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Google Fonts: only 3 weights (was 7), loaded async so they never block render -->
+<link rel="preload" as="style"
+  href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&family=Playfair+Display:ital,wght@1,700&display=swap">
+<link rel="stylesheet" media="print" onload="this.media='all'"
+  href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&family=Playfair+Display:ital,wght@1,700&display=swap">
+<noscript>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap">
+</noscript>
 <script>
 tailwind.config = {
   darkMode: 'class',
@@ -92,7 +107,7 @@ tailwind.config = {
   ::selection { background: rgba(139,92,246,0.25); color: inherit; }
 
   /* ═══════════════════════════════════════════
-     PERFORMANCE & SMOOTHNESS ENHANCEMENTSs
+     PERFORMANCE & SMOOTHNESS ENHANCEMENTS
   ═══════════════════════════════════════════ */
 
   /* GPU-accelerate the elements that animate most */
@@ -272,10 +287,8 @@ tailwind.config = {
   }
   .snap-x-scroll > * { scroll-snap-align: start; }
 
-  /* ═══════════════════════════════════════════
-     OVERSCROLL LOCK (prevent bounce on modals)
-  ═══════════════════════════════════════════ */
-  body.modal-open { overflow: hidden; overscroll-behavior: none; }
+  /* Body scroll-lock when modals are open */
+  body[data-locked] { overflow: hidden; }
 
   /* ═══════════════════════════════════════════
      FOCUS VISIBLE (keyboard a11y, not on touch)
@@ -343,7 +356,8 @@ tailwind.config = {
   }
 
   /* === ORBS === */
-  .orb { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.22; animation: float 9s ease-in-out infinite; pointer-events: none; }
+  .orb { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.22; animation: float 9s ease-in-out infinite; pointer-events: none;
+    contain: strict; transform: translateZ(0); will-change: transform; }
   .orb-purple { background: radial-gradient(circle,#7c3aed,#4c1d95); }
   .orb-cyan { background: radial-gradient(circle,#06b6d4,#0e7490); animation-delay:-4s; }
   .orb-rose { background: radial-gradient(circle,#f43f5e,#9f1239); animation-delay:-7s; }
@@ -731,7 +745,10 @@ tailwind.config = {
   .notif-dot { position:absolute; top:-3px; right:-3px; width:10px; height:10px; background:#f43f5e; border-radius:50%; border:2px solid white; animation:notif-pulse 2s ease infinite; }
   @keyframes notif-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(244,63,94,0.5)} 50%{box-shadow:0 0 0 6px rgba(244,63,94,0)} }
 
-  /* === BETTER TEXT === */
+  /* App container fades in when auth resolves; CSS fallback ensures it's
+     never permanently invisible if JS auth is slow */
+  #app-container { animation: app-reveal 0s 2.5s forwards; }
+  @keyframes app-reveal { to { opacity: 1; } }
   .text-visible { color:#1a1430 !important; }
   .dark .text-visible { color:#e2ddf5 !important; }
   .subtext-visible { color:#4b5563; }
@@ -794,7 +811,47 @@ tailwind.config = {
   .notif-dot { width:8px; height:8px; background:#7c3aed; border-radius:50%; flex-shrink:0; margin-top:5px; }
   .notif-icon-box { width:36px; height:36px; border-radius:10px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:16px; }
 
-  /* ═══ CHATBOT ENHANCEMENTS ═══ */
+  /* ═══ ORDER CHAT ═══ */
+  #chat-modal-overlay { position:fixed; inset:0; z-index:2000; background:rgba(8,6,20,0.7); backdrop-filter:blur(6px); opacity:0; visibility:hidden; transition:opacity 0.3s,visibility 0.3s; }
+  #chat-modal-overlay.open { opacity:1; visibility:visible; }
+  #chat-panel {
+    position:fixed; bottom:0; right:0; z-index:2001;
+    width:100%; max-width:420px; height:85vh; max-height:680px;
+    display:flex; flex-direction:column;
+    border-radius:24px 24px 0 0;
+    background:rgba(255,255,255,0.97); backdrop-filter:blur(24px);
+    border:1px solid rgba(139,92,246,0.18); border-bottom:none;
+    box-shadow:0 -8px 60px rgba(139,92,246,0.22);
+    transform:translateY(110%);
+    transition:transform 0.42s cubic-bezier(0.34,1.1,0.64,1);
+    will-change:transform;
+  }
+  .dark #chat-panel { background:rgba(12,8,28,0.97); }
+  #chat-panel.open { transform:translateY(0); }
+  @media(min-width:640px){
+    #chat-panel { bottom:24px; right:24px; border-radius:24px; border-bottom:1px solid rgba(139,92,246,0.18); height:75vh; }
+  }
+  .chat-header { padding:14px 16px 12px; border-bottom:1px solid rgba(139,92,246,0.1); display:flex; align-items:center; gap:12px; flex-shrink:0; }
+  .chat-header-avatar { width:40px; height:40px; border-radius:12px; object-fit:cover; flex-shrink:0; }
+  .chat-messages { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:10px; -webkit-overflow-scrolling:touch; scroll-behavior:smooth; }
+  .chat-bubble-wrap { display:flex; align-items:flex-end; gap:8px; }
+  .chat-bubble-wrap.mine { flex-direction:row-reverse; }
+  .chat-bubble { max-width:75%; padding:10px 14px; border-radius:18px; font-size:0.875rem; line-height:1.5; word-break:break-word; }
+  .chat-bubble.mine { background:linear-gradient(135deg,#7c3aed,#06b6d4); color:white; border-bottom-right-radius:4px; }
+  .chat-bubble.theirs { background:rgba(139,92,246,0.09); color:#1a1430; border-bottom-left-radius:4px; border:1px solid rgba(139,92,246,0.12); }
+  .dark .chat-bubble.theirs { background:rgba(139,92,246,0.15); color:#e2ddf5; }
+  .chat-bubble .chat-time { font-size:10px; opacity:0.6; margin-top:4px; display:block; }
+  .chat-input-bar { padding:12px 14px; border-top:1px solid rgba(139,92,246,0.1); display:flex; gap:10px; align-items:flex-end; flex-shrink:0; padding-bottom:max(12px, env(safe-area-inset-bottom)); }
+  .chat-input { flex:1; resize:none; max-height:100px; border:1.5px solid rgba(139,92,246,0.2); border-radius:14px; padding:10px 14px; font-size:0.875rem; background:rgba(255,255,255,0.7); backdrop-filter:blur(8px); outline:none; font-family:var(--font-body); line-height:1.5; transition:border-color 0.2s; }
+  .dark .chat-input { background:rgba(255,255,255,0.06); color:#e2ddf5; }
+  .chat-input:focus { border-color:#7c3aed; }
+  .chat-send-btn { width:42px; height:42px; flex-shrink:0; background:linear-gradient(135deg,#7c3aed,#06b6d4); border-radius:13px; display:flex; align-items:center; justify-content:center; color:white; cursor:pointer; transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1); }
+  .chat-send-btn:hover { transform:scale(1.1); box-shadow:0 4px 14px rgba(139,92,246,0.5); }
+  .chat-send-btn:active { transform:scale(0.92); }
+  .chat-date-divider { text-align:center; font-size:10px; color:#9ca3af; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; padding:4px 0; }
+  .chat-avatar-sm { width:28px; height:28px; border-radius:8px; object-fit:cover; flex-shrink:0; }
+  /* Seller inbox badge */
+  .chat-inbox-badge { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; background:#f43f5e; color:white; font-size:10px; font-weight:800; border-radius:99px; padding:0 4px; }
   .quick-chip { display:inline-flex; align-items:center; padding:5px 12px; background:rgba(139,92,246,0.08); border:1px solid rgba(139,92,246,0.2); border-radius:99px; font-size:11px; font-weight:600; color:#7c3aed; cursor:pointer; white-space:nowrap; transition:all 0.18s cubic-bezier(0.34,1.4,0.64,1); user-select:none; }
   .dark .quick-chip { color:#c4b5fd; background:rgba(139,92,246,0.14); border-color:rgba(139,92,246,0.28); }
   .quick-chip:hover { background:rgba(139,92,246,0.18); transform:translateY(-2px) scale(1.05); box-shadow:0 4px 14px rgba(139,92,246,0.2); }
@@ -1016,7 +1073,34 @@ tailwind.config = {
     </button>
   </nav>
 
+
 </div><!-- end app-container -->
+
+<!-- ORDER CHAT MODAL — must be OUTSIDE app-container so it's never opacity-0 -->
+<div id="chat-modal-overlay"></div>
+<div id="chat-panel">
+  <!-- Header -->
+  <div class="chat-header">
+    <div class="w-1 h-8 rounded-full flex-shrink-0" style="background:linear-gradient(180deg,#7c3aed,#06b6d4)"></div>
+    <img id="chat-other-avatar" src="" class="chat-header-avatar" loading="lazy">
+    <div class="flex-grow min-w-0">
+      <p id="chat-other-name" class="font-black text-gray-900 dark:text-white text-sm truncate"></p>
+      <p id="chat-product-name" class="text-xs text-gray-400 truncate"></p>
+    </div>
+    <button id="close-chat-btn" class="w-8 h-8 rounded-xl glass flex items-center justify-center text-gray-500 hover:text-rose-500 transition-colors flex-shrink-0 text-lg">&times;</button>
+  </div>
+  <!-- Messages -->
+  <div id="chat-messages" class="chat-messages">
+    <p class="text-center text-gray-400 text-sm py-8">Loading messages…</p>
+  </div>
+  <!-- Input -->
+  <div class="chat-input-bar">
+    <textarea id="chat-input" class="chat-input" placeholder="Type a message… e.g. Where should we meet?" rows="1" maxlength="500"></textarea>
+    <button id="chat-send-btn" class="chat-send-btn" aria-label="Send message">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+    </button>
+  </div>
+</div>
 
 <div id="popup-chat-widget"></div>
 <div id="message-container" class="fixed top-20 right-5 z-50 space-y-3"></div>
@@ -1033,7 +1117,9 @@ tailwind.config = {
 </div>
 
 <!-- FIREBASE -->
-<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<!-- Firebase SDKs — must load synchronously before the main script below -->
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
@@ -1056,6 +1142,33 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
+
+// ── Fix 3a: Offline persistence — returning users see data in ~0ms ─────────
+db.enablePersistence({ synchronizeTabs: true })
+  .catch(err => {
+    if (err.code === 'failed-precondition') console.warn('[ViTMART] Multiple tabs open — offline cache limited to one tab.');
+    else if (err.code === 'unimplemented') console.warn('[ViTMART] Offline persistence not supported in this browser.');
+  });
+
+// ── Fix 3b: XSS sanitizer — use esc() on ALL user-supplied strings ─────────
+const esc = (str = '') => String(str)
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#039;');
+
+// ── Fix 3c: Cloudinary image optimizer — auto compress + resize + WebP ──────
+const optimizeImage = (url, width = 400) => {
+  if (!url || !url.includes('cloudinary')) return url;
+  return url.replace('/upload/', `/upload/w_${width},q_auto,f_auto,dpr_auto/`);
+};
+
+// ── Fix 3d: Debounce utility ─────────────────────────────────────────────────
+const debounce = (fn, delay = 280) => {
+  let timer;
+  return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), delay); };
+};
 
 // --- State ---
 let currentUser = null;
@@ -1104,55 +1217,19 @@ const messageContainer = document.getElementById('message-container');
 const header = document.getElementById('app-header');
 const popupChatWidget = document.getElementById('popup-chat-widget');
 
-// ── Body scroll-lock (prevents background scroll when modals are open) ──
-let _lockCount = 0;
-let _savedScrollY = 0;
+// ── Simple body scroll-lock — only called explicitly, no prototype patching ──
 const lockBody = () => {
-  _lockCount++;
-  if (_lockCount === 1) {
-    _savedScrollY = window.scrollY;
-    document.body.style.position = 'fixed';
-    document.body.style.top = `-${_savedScrollY}px`;
-    document.body.style.width = '100%';
-    document.body.classList.add('modal-open');
-  }
+  if (document.body.dataset.locked) return;
+  document.body.dataset.locked = '1';
+  document.body.dataset.scrollY = String(window.scrollY);
+  document.body.style.overflow = 'hidden';
 };
 const unlockBody = () => {
-  _lockCount = Math.max(0, _lockCount - 1);
-  if (_lockCount === 0) {
-    document.body.style.position = '';
-    document.body.style.top = '';
-    document.body.style.width = '';
-    document.body.classList.remove('modal-open');
-    window.scrollTo(0, _savedScrollY);
-  }
+  if (!document.body.dataset.locked) return;
+  delete document.body.dataset.locked;
+  document.body.style.overflow = '';
+  window.scrollTo(0, parseInt(document.body.dataset.scrollY || '0'));
 };
-// Patch every modal open/close globally
-const _origAdd = DOMTokenList.prototype.add;
-const _origRemove = DOMTokenList.prototype.remove;
-DOMTokenList.prototype.add = function(...tokens) {
-  _origAdd.call(this, ...tokens);
-  if (tokens.includes('show') && this._el?.classList?.contains?.('modal')) lockBody();
-};
-DOMTokenList.prototype.remove = function(...tokens) {
-  _origRemove.call(this, ...tokens);
-  if (tokens.includes('show') && this._el?.classList?.contains?.('modal')) unlockBody();
-};
-// Simpler: just observe modal 'show' class via MutationObserver
-const _modalObserver = new MutationObserver(muts => {
-  muts.forEach(m => {
-    if (m.type !== 'attributes' || m.attributeName !== 'class') return;
-    const el = m.target;
-    if (!el.classList.contains('modal') && !el.id?.includes('modal') && el.tagName !== 'DIV') return;
-    const hasShow = el.classList.contains('show');
-    const hadShow = m.oldValue?.includes('show');
-    if (hasShow && !hadShow) lockBody();
-    else if (!hasShow && hadShow) unlockBody();
-  });
-});
-document.querySelectorAll('.modal, #welcome-overlay, #command-palette').forEach(m => {
-  _modalObserver.observe(m, { attributes: true, attributeOldValue: true });
-});
 
 // --- Cloudinary ---
 const uploadToCloudinary = async (file) => {
@@ -1586,17 +1663,17 @@ const setActiveTab = (tabName, isBackAction = false) => {
   const activeTab = document.getElementById(`${tabName}-tab`);
   if (activeTab) {
     switch(tabName) {
-      case 'home': renderHomePage(); break;
-      case 'buy': renderBuyPage(); break;
-      case 'trade': renderTradePage(); break;
-      case 'sell': renderSellPage(); break;
-      case 'lost-and-found': renderLostAndFoundPage(); break;
-      case 'my-listings': (window.renderMyListingsPageV2||renderMyListingsPage)(); break;
-      case 'orders': renderOrdersPage(); break;
-      case 'profile': renderProfilePage(); break;
-      case 'reviews': renderReviewsPage(); break;
-      case 'manage': renderManagePage(); break;
-      case 'noticeboard': renderNoticeboardPage(); break;
+      case 'home':         safeRender(renderHomePage, 'home'); break;
+      case 'buy':          safeRender(renderBuyPage, 'buy'); break;
+      case 'trade':        safeRender(renderTradePage, 'trade'); break;
+      case 'sell':         safeRender(renderSellPage, 'sell'); break;
+      case 'lost-and-found': safeRender(renderLostAndFoundPage, 'lost-and-found'); break;
+      case 'my-listings':  safeRender(window.renderMyListingsPageV2 || renderMyListingsPage, 'my-listings'); break;
+      case 'orders':       safeRender(renderOrdersPage, 'orders'); break;
+      case 'profile':      safeRender(renderProfilePage, 'profile'); break;
+      case 'reviews':      safeRender(renderReviewsPage, 'reviews'); break;
+      case 'manage':       safeRender(renderManagePage, 'manage'); break;
+      case 'noticeboard':  safeRender(renderNoticeboardPage, 'noticeboard'); break;
       case 'product-detail': break;
     }
     activeTab.classList.add('active');
@@ -1758,7 +1835,7 @@ const renderCart = () => {
     <div class="flex-grow p-6 overflow-y-auto space-y-3">
       ${items.length > 0 ? items.map(item => `
         <div class="flex items-center space-x-4 p-3 glass rounded-xl">
-          <img src="${item.imageUrl}" class="w-14 h-14 object-cover rounded-lg flex-shrink-0">
+          <img src="${optimizeImage(item.imageUrl,120)}" class="w-14 h-14 object-cover rounded-lg flex-shrink-0" loading="lazy" decoding="async">
           <div class="flex-grow min-w-0">
             <p class="font-semibold truncate text-sm">${item.name}</p>
             <p class="text-xs text-gray-500 dark:text-gray-400 font-medium">₹${item.price.toFixed(0)}</p>
@@ -1804,8 +1881,51 @@ const renderCheckoutModal = () => {
 };
 
 // --- Home Page ---
+// ── Safe render — catches errors so one broken tab never crashes the app ─────
+const safeRender = (fn, label = fn.name) => {
+  try { fn(); }
+  catch (err) {
+    console.error(`[ViTMART] Render error in ${label}:`, err);
+    showMessage('Something went wrong loading this page. Please try again.', 'error');
+  }
+};
+
+// ── Home page cache — avoids rebuilding 1000-line HTML string on every visit ─
+let _homeCache = null;
+let _homeCacheTime = 0;
+let _homeCacheProductCount = 0;
+const HOME_TTL = 45_000; // 45 seconds
+
 const renderHomePage = () => {
   const homeTab = document.getElementById('home-tab');
+  const now = Date.now();
+  const productCount = products.length;
+
+  // Serve from cache if still fresh AND product count hasn't changed
+  if (
+    _homeCache &&
+    (now - _homeCacheTime) < HOME_TTL &&
+    productCount === _homeCacheProductCount
+  ) {
+    homeTab.innerHTML = _homeCache;
+    // Re-attach dynamic sections (they read live data)
+    renderHomepageCategories();
+    renderRecentlyAddedProducts();
+    renderHomepageLostAndFoundPreview();
+    setupScrollAnimations();
+    return;
+  }
+
+  _buildHomePage(homeTab);
+  _homeCache = homeTab.innerHTML;
+  _homeCacheTime = now;
+  _homeCacheProductCount = productCount;
+};
+
+// Invalidate cache whenever products change (called from onSnapshot)
+const invalidateHomeCache = () => { _homeCache = null; };
+
+const _buildHomePage = (homeTab) => {
   homeTab.innerHTML = `
   <!-- HERO -->
   <section class="hero-bg relative overflow-hidden noise min-h-[92vh] flex items-center">
@@ -2062,7 +2182,7 @@ const renderHomePage = () => {
   renderRecentlyAddedProducts();
   renderHomepageLostAndFoundPreview();
   setupScrollAnimations();
-};
+}; // end _buildHomePage
 
 const renderHomepageCategories = () => {
   const el = document.getElementById('homepage-categories-container');
@@ -2106,7 +2226,7 @@ const renderHomepageLostAndFoundPreview = () => {
     const isLost = item.reportType === 'lost';
     return `
       <div class="glass p-4 rounded-2xl flex items-center gap-4 hover:shadow-lg hover:shadow-vit-500/10 transition-all duration-200 hover:-translate-y-1">
-        <img src="${item.imageUrl||'https://placehold.co/80x80/e8e0ff/7c3aed?text=?'}" alt="${item.title}" class="w-16 h-16 object-cover rounded-xl flex-shrink-0">
+        <img src="${optimizeImage(item.imageUrl,120)||'https://placehold.co/80x80/e8e0ff/7c3aed?text=?'}" alt="${esc(item.title)}" class="w-16 h-16 object-cover rounded-xl flex-shrink-0" loading="lazy" decoding="async">
         <div class="flex-grow min-w-0">
           <span class="text-xs font-bold px-2 py-0.5 rounded-full ${isLost?'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300':'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'}">${isLost?'LOST':'FOUND'}</span>
           <h4 class="font-bold text-gray-900 dark:text-white mt-1 truncate text-sm">${item.title}</h4>
@@ -2164,16 +2284,16 @@ const createProductCard = (product) => {
         <button class="wishlist-btn ${isWishlisted?'wishlisted':''}" data-id="${product.id}" title="Save to wishlist">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
         </button>` : ''}
-      <img src="${product.imageUrl||'https://placehold.co/400x300/e8e0ff/7c3aed?text=No+Image'}" alt="${product.name}"
+      <img src="${optimizeImage(product.imageUrl, 400) || 'https://placehold.co/400x300/e8e0ff/7c3aed?text=No+Image'}" alt="${esc(product.name)}"
         class="w-full h-48 object-cover transition-transform duration-500 lightbox-trigger ${product.status!=='available'?'grayscale opacity-75':''}"
-        data-src="${product.imageUrl}" loading="lazy">
+        data-src="${product.imageUrl}" loading="lazy" decoding="async">
       <div class="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
       ${quickViewStrip}
     </div>
     <div class="p-4 flex flex-col flex-grow pointer-events-none">
-      <p class="text-xs text-gray-400 mb-1">by ${product.sellerName||'a student'}</p>
-      <h3 class="text-base font-bold text-gray-900 dark:text-white truncate">${product.name}</h3>
-      <p class="text-gray-500 dark:text-gray-400 text-xs mt-1 flex-grow line-clamp-2 leading-relaxed">${product.description}</p>
+      <p class="text-xs text-gray-400 mb-1">by ${esc(product.sellerName||'a student')}</p>
+      <h3 class="text-base font-bold text-gray-900 dark:text-white truncate">${esc(product.name)}</h3>
+      <p class="text-gray-500 dark:text-gray-400 text-xs mt-1 flex-grow line-clamp-2 leading-relaxed">${esc(product.description)}</p>
       <div class="mt-3 flex justify-between items-center">
         <span class="text-xl font-black font-syne grad-text-vp">₹${product.price?.toFixed(0)||'N/A'}</span>
         <div class="pointer-events-auto">${actionArea}</div>
@@ -2237,7 +2357,8 @@ const renderTradePage = () => {
 
 const attachFilterListeners = (tabId, tradeOnly) => {
   const c = document.getElementById(tabId);
-  c.querySelector('#search-input').addEventListener('input', () => filterAndRenderProducts(tradeOnly));
+  const debouncedFilter = debounce(() => filterAndRenderProducts(tradeOnly), 280);
+  c.querySelector('#search-input').addEventListener('input', debouncedFilter);
   c.querySelector('#filter-category').addEventListener('change', () => filterAndRenderProducts(tradeOnly));
   c.querySelector('#filter-price').addEventListener('change', () => filterAndRenderProducts(tradeOnly));
   c.querySelector('#filter-sort').addEventListener('change', () => filterAndRenderProducts(tradeOnly));
@@ -2267,14 +2388,59 @@ const filterAndRenderProducts = (tradeOnly=false) => {
   renderProductList(list, tradeOnly);
 };
 
-const renderProductList = (list, tradeOnly=false) => {
+// Pagination state — separate counters for buy and trade tabs
+const _pageState = { buy: 0, trade: 0 };
+const ITEMS_PER_PAGE = 12;
+
+const renderProductList = (list, tradeOnly = false) => {
   const cId = tradeOnly ? 'trade-product-list-container' : 'product-list-container';
   const c = document.getElementById(cId);
   if (!c) return;
+
+  // Reset page counter whenever the full list is rendered fresh
+  const pageKey = tradeOnly ? 'trade' : 'buy';
+  _pageState[pageKey] = 0;
+
   c.innerHTML = '';
-  if (list.length > 0) list.forEach(p => c.appendChild(createProductCard(p)));
-  else if (currentUser) c.innerHTML = `<p class="text-gray-400 text-center py-12 col-span-full">${tradeOnly?'No items available for trade yet.':'No products match your search. 🤷'}</p>`;
-  else { for(let i=0;i<8;i++) c.appendChild(createProductSkeleton()); }
+
+  // Remove any old load-more button
+  document.getElementById(`load-more-${pageKey}`)?.remove();
+
+  if (list.length === 0) {
+    if (currentUser) {
+      c.innerHTML = `<p class="text-gray-400 text-center py-12 col-span-full">${tradeOnly ? 'No items available for trade yet.' : 'No products match your search. 🤷'}</p>`;
+    } else {
+      for (let i = 0; i < 8; i++) c.appendChild(createProductSkeleton());
+    }
+    return;
+  }
+
+  // Render first page
+  const firstSlice = list.slice(0, ITEMS_PER_PAGE);
+  firstSlice.forEach(p => c.appendChild(createProductCard(p)));
+
+  // Show Load More if more pages exist
+  if (list.length > ITEMS_PER_PAGE) {
+    const remaining = list.length - ITEMS_PER_PAGE;
+    const btn = document.createElement('button');
+    btn.id = `load-more-${pageKey}`;
+    btn.className = 'col-span-full w-full py-3.5 mt-2 glass rounded-2xl font-bold text-vit-600 dark:text-vit-400 border border-vit-500/20 hover:border-vit-500/40 hover:-translate-y-0.5 transition-all duration-200 text-sm';
+    btn.innerHTML = `Load More <span class="opacity-60">(${remaining} more)</span>`;
+    btn.addEventListener('click', () => {
+      _pageState[pageKey]++;
+      const start = _pageState[pageKey] * ITEMS_PER_PAGE;
+      const nextSlice = list.slice(start, start + ITEMS_PER_PAGE);
+      nextSlice.forEach(p => c.appendChild(createProductCard(p)));
+      const newRemaining = list.length - (start + ITEMS_PER_PAGE);
+      if (newRemaining <= 0) {
+        btn.remove();
+      } else {
+        btn.innerHTML = `Load More <span class="opacity-60">(${newRemaining} more)</span>`;
+      }
+    });
+    // Append button after grid, not inside it
+    c.parentElement.appendChild(btn);
+  }
 };
 
 // --- Product Detail ---
@@ -2308,19 +2474,19 @@ const renderProductDetailPage = (product) => {
         <div class="grid md:grid-cols-2 gap-0">
           <div class="p-6 bg-gray-50 dark:bg-white/2 relative">
             ${soldBadge}${tradeBadge}
-            <img src="${product.imageUrl||'https://placehold.co/800x600/e8e0ff/7c3aed?text=No+Image'}" alt="${product.name}" class="w-full h-[480px] object-contain rounded-xl ${product.status!=='available'?'grayscale opacity-60':''}">
+            <img src="${optimizeImage(product.imageUrl, 800) || 'https://placehold.co/800x600/e8e0ff/7c3aed?text=No+Image'}" alt="${esc(product.name)}" class="w-full h-[480px] object-contain rounded-xl ${product.status!=='available'?'grayscale opacity-60':''}" loading="lazy" decoding="async">
           </div>
           <div class="p-8 flex flex-col">
             <div class="flex items-center gap-2 mb-2">
-              <span class="text-xs font-bold px-3 py-1 bg-vit-100 dark:bg-vit-900/40 text-vit-700 dark:text-vit-300 rounded-full">${product.category||'Other'}</span>
+              <span class="text-xs font-bold px-3 py-1 bg-vit-100 dark:bg-vit-900/40 text-vit-700 dark:text-vit-300 rounded-full">${esc(product.category||'Other')}</span>
               ${product.isTradeable ? `<span class="text-xs font-bold px-3 py-1 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded-full">🔄 Tradeable</span>` : ''}
             </div>
-            <h1 class="text-3xl lg:text-4xl font-black font-syne text-gray-900 dark:text-white mt-2 leading-tight">${product.name}</h1>
+            <h1 class="text-3xl lg:text-4xl font-black font-syne text-gray-900 dark:text-white mt-2 leading-tight">${esc(product.name)}</h1>
             <div class="mt-5 py-4 border-y border-gray-100 dark:border-white/10 flex items-center gap-3">
-              <img src="${product.sellerPhotoURL||`https://placehold.co/44x44/e8e0ff/7c3aed?text=${getInitials(product.sellerName)}`}" class="w-11 h-11 rounded-xl object-cover" alt="${product.sellerName}">
-              <div><p class="text-xs text-gray-400">Listed by</p><p class="font-bold text-gray-900 dark:text-white">${product.sellerName}</p></div>
+              <img src="${optimizeImage(product.sellerPhotoURL,88)||`https://placehold.co/44x44/e8e0ff/7c3aed?text=${getInitials(product.sellerName)}`}" class="w-11 h-11 rounded-xl object-cover" alt="${esc(product.sellerName)}" loading="lazy" decoding="async">
+              <div><p class="text-xs text-gray-400">Listed by</p><p class="font-bold text-gray-900 dark:text-white">${esc(product.sellerName)}</p></div>
             </div>
-            <p class="text-gray-600 dark:text-gray-300 mt-5 flex-grow leading-relaxed">${product.description}</p>
+            <p class="text-gray-600 dark:text-gray-300 mt-5 flex-grow leading-relaxed">${esc(product.description)}</p>
             <div class="mt-8">
               <p class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">Price</p>
               <p class="text-5xl font-black font-syne grad-text-vp mb-5">₹${product.price.toFixed(0)}</p>
@@ -2411,7 +2577,7 @@ const renderLostAndFoundPage = () => {
     </div>
     <div id="lost-and-found-list-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>`;
   filterAndRenderLostFoundItems();
-  document.getElementById('lost-found-search-input').addEventListener('input', filterAndRenderLostFoundItems);
+  document.getElementById('lost-found-search-input').addEventListener('input', debounce(filterAndRenderLostFoundItems, 280));
   document.getElementById('lost-found-filter-status').addEventListener('change', filterAndRenderLostFoundItems);
 };
 
@@ -2453,17 +2619,17 @@ const createLostAndFoundCard = (item) => {
   }
   card.innerHTML = `
     <div class="relative">
-      <img src="${item.imageUrl||'https://placehold.co/400x300/e8e0ff/7c3aed?text=?'}" alt="${item.title}" class="w-full h-44 object-cover ${isResolved?'grayscale':''}">
+      <img src="${optimizeImage(item.imageUrl,600)||'https://placehold.co/400x300/e8e0ff/7c3aed?text=?'}" alt="${esc(item.title)}" class="w-full h-44 object-cover ${isResolved?'grayscale':''}" loading="lazy" decoding="async">
       <div class="absolute top-3 left-3 px-2.5 py-1 text-xs font-bold rounded-full text-white ${isLost?'bg-rose-500':'bg-emerald-500'}">${isLost?'LOST':'FOUND'}</div>
       ${isResolved?`<div class="absolute top-3 right-3 px-2.5 py-1 text-xs font-bold bg-gray-700 text-white rounded-full">RESOLVED</div>`:''}
     </div>
     <div class="p-5 flex flex-col flex-grow">
-      <h3 class="font-bold text-gray-900 dark:text-white truncate">${item.title}</h3>
-      <p class="text-xs text-gray-400 mt-1">by ${item.reporterName} · ${date}</p>
-      <p class="text-gray-600 dark:text-gray-300 text-sm mt-3 flex-grow leading-relaxed">${item.description}</p>
+      <h3 class="font-bold text-gray-900 dark:text-white truncate">${esc(item.title)}</h3>
+      <p class="text-xs text-gray-400 mt-1">by ${esc(item.reporterName)} · ${date}</p>
+      <p class="text-gray-600 dark:text-gray-300 text-sm mt-3 flex-grow leading-relaxed">${esc(item.description)}</p>
       <div class="mt-4 pt-4 border-t border-gray-100 dark:border-white/10 space-y-1 text-xs">
-        <p><strong class="text-gray-400">${isLost?'Last seen:':'Found at:'}</strong> <span class="text-gray-600 dark:text-gray-300">${item.location}</span></p>
-        ${!isLost&&item.collectionPoint?`<p><strong class="text-gray-400">Collect at:</strong> <span class="text-gray-600 dark:text-gray-300">${item.collectionPoint}</span></p>`:''}
+        <p><strong class="text-gray-400">${isLost?'Last seen:':'Found at:'}</strong> <span class="text-gray-600 dark:text-gray-300">${esc(item.location)}</span></p>
+        ${!isLost&&item.collectionPoint?`<p><strong class="text-gray-400">Collect at:</strong> <span class="text-gray-600 dark:text-gray-300">${esc(item.collectionPoint)}</span></p>`:''}
       </div>
       ${action}
     </div>`;
@@ -2508,9 +2674,6 @@ const renderLostAndFoundModal = (reportType='lost') => {
 
 // --- Orders ---
 const renderOrdersPage = (freshOrders) => {
-  // Safety net: if orders array is empty, try a direct Firestore fetch first.
-  // The onSnapshot listener handles real-time, but there can be a brief window
-  // (e.g. immediately after checkout) where orders is not yet updated.
   if (!freshOrders && orders.length === 0) {
     db.collection('orders').where('userId','==',currentUser.uid).get()
       .then(snap => {
@@ -2535,6 +2698,31 @@ const renderOrdersPage = (freshOrders) => {
   else {
     html += `<div class="space-y-5">${orders.map(order => {
       const date = order.createdAt ? new Date(order.createdAt.toDate()).toLocaleString('en-US',{year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'}) : 'Just now';
+      // Collect unique sellers in this order for chat buttons
+      const sellerMap = {};
+      (order.items||[]).forEach(item => {
+        const fp = products.find(p => p.id === item.productId);
+        const sid = item.sellerId || fp?.sellerId;
+        const sname = item.sellerName || fp?.sellerName;
+        const sphoto = item.sellerPhotoURL || fp?.sellerPhotoURL;
+        if (sid && sid !== currentUser.uid && !sellerMap[sid]) {
+          sellerMap[sid] = { name: sname || 'Seller', photo: sphoto || '', productName: item.name, productImage: item.imageUrl };
+        }
+      });
+      const chatButtons = Object.entries(sellerMap).map(([sid, info]) => {
+        const chatId = `${order.id}_${sid}`;
+        return `<button class="open-order-chat-btn flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all hover:-translate-y-0.5"
+          style="background:linear-gradient(135deg,#7c3aed,#06b6d4);color:white;box-shadow:0 4px 16px rgba(139,92,246,0.35)"
+          data-chat-id="${chatId}"
+          data-seller-id="${sid}"
+          data-seller-name="${esc(info.name)}"
+          data-seller-photo="${esc(info.photo)}"
+          data-product-name="${esc(info.productName)}"
+          data-product-image="${esc(info.productImage)}">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+          Chat with ${esc(info.name)}
+        </button>`;
+      }).join('');
       return `
         <div class="glass p-6 rounded-2xl shadow-lg">
           <div class="flex flex-col sm:flex-row justify-between items-start border-b border-gray-100 dark:border-white/10 pb-4 mb-4 gap-2">
@@ -2546,14 +2734,14 @@ const renderOrdersPage = (freshOrders) => {
               const fp = products.find(p => p.id===item.productId);
               return `
               <div class="flex items-center justify-between gap-4 p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-white/5 transition-colors cursor-pointer" data-action="view-details" data-id="${item.productId}">
-                <div class="flex items-center gap-3 flex-grow">
-                  <img src="${item.imageUrl}" class="w-14 h-14 object-cover rounded-xl flex-shrink-0">
-                  <div><p class="font-bold text-sm">${item.name}</p><p class="text-xs text-gray-400 font-medium">₹${item.price.toFixed(0)}</p></div>
+                <div class="flex items-center gap-3 flex-grow min-w-0">
+                  <img src="${optimizeImage(item.imageUrl,120)}" class="w-14 h-14 object-cover rounded-xl flex-shrink-0" loading="lazy" decoding="async">
+                  <div class="min-w-0"><p class="font-bold text-sm truncate">${esc(item.name)}</p><p class="text-xs text-gray-400 font-medium">₹${item.price.toFixed(0)}</p></div>
                 </div>
-                <div>${fp?.sellerEmail?`<a href="mailto:${fp.sellerEmail}" class="px-3 py-1.5 bg-vit-100 dark:bg-vit-900/40 text-vit-700 dark:text-vit-300 text-xs font-bold rounded-xl hover:bg-vit-200 transition-colors" onclick="event.stopPropagation()">Contact Seller</a>`:`<span class="text-xs text-gray-400">Unavailable</span>`}</div>
               </div>`;
             }).join('')}
           </div>
+          ${chatButtons ? `<div class="mt-4 pt-4 border-t border-gray-100 dark:border-white/10 flex flex-wrap gap-3">${chatButtons}</div>` : ''}
         </div>`;
     }).join('')}</div>`;
   }
@@ -3152,7 +3340,8 @@ const addToCart = (productId) => {
   showMessage('Added to cart!','success');
   recLog(p, 'cart'); // track cart add for recommendations
   db.collection('carts').doc(currentUser.uid).collection('items').doc(productId).set({
-    productId:p.id, name:p.name, price:p.price, imageUrl:p.imageUrl, id:productId, quantity:1
+    productId:p.id, name:p.name, price:p.price, imageUrl:p.imageUrl, id:productId, quantity:1,
+    sellerId:p.sellerId||'', sellerName:p.sellerName||'', sellerPhotoURL:p.sellerPhotoURL||''
   }).catch(() => showMessage('Failed to add to cart.','error'));
 };
 
@@ -3169,24 +3358,87 @@ const handleCheckout = async () => {
     await new Promise(r=>setTimeout(r,1500));
     const items = Object.values(cart);
     const total = items.reduce((s,i)=>s+i.price*i.quantity,0);
-    const batch = db.batch();
+
+    // Enrich items with seller info from the products array
+    const orderItems = items.map(({id,...rest}) => {
+      const p = products.find(x => x.id === (rest.productId || id));
+      return {
+        ...rest,
+        productId: rest.productId || id || '',
+        sellerId:      rest.sellerId      || p?.sellerId      || '',
+        sellerName:    rest.sellerName    || p?.sellerName    || '',
+        sellerPhotoURL:rest.sellerPhotoURL|| p?.sellerPhotoURL|| '',
+      };
+    });
+
+    // ── Step 1: Write the order document ──────────────────
     const orderRef = db.collection('orders').doc();
-    batch.set(orderRef,{userId:currentUser.uid,userName:currentUser.displayName,createdAt:firebase.firestore.FieldValue.serverTimestamp(),total,items:items.map(({id,...rest})=>({...rest}))});
-    items.forEach(item => { const pr = db.collection('products').doc(item.id); batch.update(pr,{status:'sold'}); });
-    const snap = await db.collection('carts').doc(currentUser.uid).collection('items').get();
-    snap.forEach(d => batch.delete(d.ref));
-    await batch.commit();
+    const orderId  = orderRef.id;
+    await orderRef.set({
+      userId: currentUser.uid,
+      userName: currentUser.displayName,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      total,
+      items: orderItems,
+    });
+
+    // ── Step 2: Clear cart ─────────────────────────────────
+    const cartSnap = await db.collection('carts').doc(currentUser.uid).collection('items').get();
+    const cartBatch = db.batch();
+    cartSnap.forEach(d => cartBatch.delete(d.ref));
+    await cartBatch.commit();
+
+    // ── Step 3: Mark products sold (best-effort — Firestore rules
+    //           require buyer to be allowed to update status) ─────
+    await Promise.allSettled(
+      items.map(item =>
+        db.collection('products').doc(item.id || item.productId)
+          .update({ status: 'sold' })
+          .catch(err => console.warn(`Could not mark ${item.id} sold:`, err.message))
+      )
+    );
+
+    // ── Step 4: Create chat rooms per seller ───────────────
+    const sellersSeen = new Set();
+    for (const item of orderItems) {
+      if (!item.sellerId || item.sellerId === currentUser.uid) continue;
+      if (sellersSeen.has(item.sellerId)) continue;
+      sellersSeen.add(item.sellerId);
+      const chatId   = `${orderId}_${item.sellerId}`;
+      const chatItem = orderItems.find(i => i.sellerId === item.sellerId);
+      await db.collection('chats').doc(chatId).set({
+        orderId,
+        buyerId:      currentUser.uid,
+        buyerName:    currentUser.displayName || 'Buyer',
+        buyerPhoto:   currentUser.photoURL    || '',
+        sellerId:     item.sellerId,
+        sellerName:   item.sellerName   || 'Seller',
+        sellerPhoto:  item.sellerPhotoURL|| '',
+        productName:  chatItem?.name    || 'Item',
+        productImage: chatItem?.imageUrl|| '',
+        productId:    chatItem?.productId|| '',
+        lastMessage:  '',
+        lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
+        createdAt:     firebase.firestore.FieldValue.serverTimestamp(),
+        unreadBuyer:  0,
+        unreadSeller: 0,
+      }).catch(err => console.warn('Chat room creation failed:', err.message));
+    }
+
+    // ── Done ───────────────────────────────────────────────
     checkoutModal.classList.remove('show');
     triggerConfetti();
-    showMessage('Purchase complete! 🎉 Redirecting to your orders…','success');
-    // Notify sellers of the purchase
+    showMessage('Purchase complete! 🎉 Redirecting to your orders…', 'success');
     if (window._afterCheckoutNotify) window._afterCheckoutNotify(items);
-    // Track each purchased item as a strong buy signal
     items.forEach(item => { const bp = products.find(p=>p.id===item.id||p.id===item.productId); if(bp) recLog(bp,'buy'); });
-    // Wait for the onSnapshot listener to pick up the new order, then navigate.
     setTimeout(() => setActiveTab('orders'), 1200);
-  } catch(e) { showMessage('Payment failed: '+(e.message||e.code||'Unknown error. Check your connection.'),'error'); console.error('Checkout error:',e); }
-  finally { btn.disabled=false; btn.innerHTML='Pay Now'; }
+
+  } catch(e) {
+    console.error('Checkout error:', e);
+    showMessage('Payment failed: ' + (e.message || e.code || 'Unknown error. Check your connection.'), 'error');
+  } finally {
+    btn.disabled=false; btn.innerHTML='Pay Now';
+  }
 };
 
 // --- Trade Logic ---
@@ -3367,6 +3619,7 @@ const startPublicListeners = () => {
 
   productUnsubscribe = db.collection('products').orderBy('createdAt','desc').onSnapshot(snap => {
     products = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    invalidateHomeCache(); // products changed — next home visit rebuilds fresh
     // Re-render whichever content tab is currently showing
     const at = document.querySelector('.tab-content.active');
     if (at && at.id !== 'product-detail-tab') {
@@ -3612,17 +3865,22 @@ window.addEventListener('scroll', () => {
 const pageLoader = document.getElementById('page-loader');
 const loaderBar = document.getElementById('loader-bar');
 let loaderPct = 0;
+let _loaderHidden = false;
 const loaderInterval = setInterval(() => {
   loaderPct = Math.min(loaderPct + Math.random() * 15 + 3, 90);
   if (loaderBar) loaderBar.style.width = loaderPct + '%';
 }, 100);
 const hideLoader = () => {
+  if (_loaderHidden) return;
+  _loaderHidden = true;
   clearInterval(loaderInterval);
   if (loaderBar) loaderBar.style.width = '100%';
-  setTimeout(() => pageLoader?.classList.add('hidden'), 300);
+  setTimeout(() => { if (pageLoader) pageLoader.classList.add('hidden'); }, 300);
 };
-window.addEventListener('load', () => setTimeout(hideLoader, 500));
-setTimeout(hideLoader, 3000);
+// Multiple fallbacks — whichever fires first wins
+window.addEventListener('load', () => setTimeout(hideLoader, 400));
+setTimeout(hideLoader, 2000);  // Hard cap at 2s — never stays stuck
+document.addEventListener('vitmart-user-ready', hideLoader); // Hide as soon as auth resolves
 
 // ══════════════════════════════════════════════
 // PREMIUM FEATURE 2: CUSTOM CURSOR (desktop only)
@@ -3900,14 +4158,14 @@ document.body.addEventListener('click', e => {
     overlay.innerHTML = `
       <div class="glass-strong rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" style="animation:tab-reveal 0.35s cubic-bezier(0.34,1.2,0.64,1) forwards">
         <div class="relative">
-          <img src="${product.imageUrl||'https://placehold.co/400x300/e8e0ff/7c3aed?text=?'}" class="w-full h-52 object-cover">
+          <img src="${optimizeImage(product.imageUrl,600)||'https://placehold.co/400x300/e8e0ff/7c3aed?text=?'}" class="w-full h-52 object-cover" loading="lazy" decoding="async">
           <button id="close-qv" class="absolute top-3 right-3 w-8 h-8 glass rounded-xl flex items-center justify-center text-white text-lg hover:bg-white/20 transition-colors">&times;</button>
           ${product.isTradeable?`<div class="badge-tradeable">🔄 Trade</div>`:''}
         </div>
         <div class="p-5">
-          <p class="text-xs text-gray-400 mb-1">by ${product.sellerName}</p>
-          <h3 class="text-lg font-black font-syne text-gray-900 dark:text-white">${product.name}</h3>
-          <p class="text-gray-500 dark:text-gray-400 text-sm mt-2 leading-relaxed line-clamp-3">${product.description}</p>
+          <p class="text-xs text-gray-400 mb-1">by ${esc(product.sellerName)}</p>
+          <h3 class="text-lg font-black font-syne text-gray-900 dark:text-white">${esc(product.name)}</h3>
+          <p class="text-gray-500 dark:text-gray-400 text-sm mt-2 leading-relaxed line-clamp-3">${esc(product.description)}</p>
           <div class="flex items-center justify-between mt-4">
             <span class="text-2xl font-black font-syne grad-text-vp">₹${product.price.toFixed(0)}</span>
             <div class="flex gap-2">
@@ -4103,7 +4361,7 @@ const renderReviewsFeed = (reviews, filter='all') => {
           <div class="flex items-center gap-3">
             ${avatar}
             <div>
-              <p class="font-bold text-gray-900 dark:text-white text-sm">${r.authorName}</p>
+              <p class="font-bold text-gray-900 dark:text-white text-sm">${esc(r.authorName)}</p>
               <p class="text-xs text-gray-400">${timeAgo}</p>
             </div>
           </div>
@@ -4112,8 +4370,8 @@ const renderReviewsFeed = (reviews, filter='all') => {
             ${canDelete ? `<button class="delete-review-btn p-1 text-gray-300 hover:text-rose-500 transition-colors rounded-lg" data-id="${r.id}" title="Delete review"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>` : ''}
           </div>
         </div>
-        ${r.subject ? `<p class="text-xs font-bold text-vit-600 dark:text-vit-400 mb-2 uppercase tracking-wider">Re: ${r.subject}</p>` : ''}
-        <p class="text-gray-700 dark:text-gray-300 text-sm leading-relaxed">${r.text}</p>
+        ${r.subject ? `<p class="text-xs font-bold text-vit-600 dark:text-vit-400 mb-2 uppercase tracking-wider">Re: ${esc(r.subject)}</p>` : ''}
+        <p class="text-gray-700 dark:text-gray-300 text-sm leading-relaxed">${esc(r.text)}</p>
       </div>`;
     }).join('')}`;
 
@@ -4188,9 +4446,9 @@ const renderManagePage = (freshOrders) => {
               ${soldProducts.map(p => `
                 <div class="delete-item-row">
                   <input type="checkbox" class="sold-item-check styled-check" data-id="${p.id}">
-                  <img src="${p.imageUrl||'https://placehold.co/40x40/e8e0ff/7c3aed?text=?'}" class="w-10 h-10 rounded-lg object-cover flex-shrink-0">
+                  <img src="${optimizeImage(p.imageUrl,80)||'https://placehold.co/40x40/e8e0ff/7c3aed?text=?'}" class="w-10 h-10 rounded-lg object-cover flex-shrink-0" loading="lazy" decoding="async">
                   <div class="flex-grow min-w-0">
-                    <p class="font-semibold text-sm text-gray-900 dark:text-white truncate">${p.name}</p>
+                    <p class="font-semibold text-sm text-gray-900 dark:text-white truncate">${esc(p.name)}</p>
                     <p class="text-xs text-gray-400">₹${p.price} · <span class="${p.status==='sold'?'text-rose-500':'text-emerald-500'} font-bold">${p.status.toUpperCase()}</span></p>
                   </div>
                 </div>`).join('')}
@@ -4277,8 +4535,8 @@ const renderManagePage = (freshOrders) => {
   wlContent.innerHTML = wlItems.length === 0
     ? `<p class="text-gray-400 text-sm text-center py-4">No saved items</p>`
     : wlItems.slice(0,4).map(p=>`<div class="delete-item-row">
-        <img src="${p.imageUrl||'https://placehold.co/40x40'}" class="w-10 h-10 rounded-lg object-cover">
-        <div class="flex-grow min-w-0"><p class="font-semibold text-sm truncate text-gray-900 dark:text-white">${p.name}</p><p class="text-xs text-gray-400">₹${p.price}</p></div>
+        <img src="${optimizeImage(p.imageUrl,80)||'https://placehold.co/40x40/e8e0ff/7c3aed?text=?'}" class="w-10 h-10 rounded-lg object-cover" loading="lazy" decoding="async">
+        <div class="flex-grow min-w-0"><p class="font-semibold text-sm truncate text-gray-900 dark:text-white">${esc(p.name)}</p><p class="text-xs text-gray-400">₹${p.price}</p></div>
         <button class="remove-wl-btn text-gray-300 hover:text-rose-500 transition-colors p-1 rounded-lg" data-id="${p.id}">✕</button>
       </div>`).join('')
       + (wlItems.length>4 ? `<p class="text-center text-xs text-gray-400 mt-2">+${wlItems.length-4} more</p>` : '');
@@ -4632,12 +4890,12 @@ const renderRecommendationsSection = (containerId) => {
         return `
         <div class="rec-card group" data-action="view-details" data-id="${p.id}">
           <div style="position:relative;overflow:hidden">
-            <img src="${p.imageUrl||'https://placehold.co/200x160/e8e0ff/7c3aed?text=?'}" alt="${p.name}" class="w-full h-40 object-cover transition-transform duration-500 group-hover:scale-105">
+            <img src="${optimizeImage(p.imageUrl,400)||'https://placehold.co/200x160/e8e0ff/7c3aed?text=?'}" alt="${esc(p.name)}" class="w-full h-40 object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" decoding="async">
             <div style="position:absolute;top:8px;left:8px;${badgeClass};color:white;font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;letter-spacing:0.04em;white-space:nowrap;max-width:calc(100% - 16px);overflow:hidden;text-overflow:ellipsis">${reason}</div>
           </div>
           <div class="p-3">
-            <p class="font-bold text-gray-900 dark:text-white text-sm truncate">${p.name}</p>
-            <p class="text-xs text-gray-400 truncate mt-0.5">${p.category||'Other'} · by ${p.sellerName||'Student'}</p>
+            <p class="font-bold text-gray-900 dark:text-white text-sm truncate">${esc(p.name)}</p>
+            <p class="text-xs text-gray-400 truncate mt-0.5">${esc(p.category||'Other')} · by ${esc(p.sellerName||'Student')}</p>
             <p class="font-black grad-text-vp text-base mt-2">₹${p.price?.toFixed(0)||'—'}</p>
           </div>
         </div>`;
@@ -4721,10 +4979,10 @@ const homeRecObs = new MutationObserver(() => {
           <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             ${recs.map(p=>`
               <div class="rec-card group" data-action="view-details" data-id="${p.id}" style="position:relative">
-                <img src="${p.imageUrl||'https://placehold.co/200x160/e8e0ff/7c3aed?text=?'}" class="w-full h-32 object-cover transition-transform duration-500 group-hover:scale-105">
+                <img src="${optimizeImage(p.imageUrl,300)||'https://placehold.co/200x160/e8e0ff/7c3aed?text=?'}" class="w-full h-32 object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" decoding="async">
                 <div class="p-3">
-                  <p class="font-bold text-sm text-gray-900 dark:text-white truncate">${p.name}</p>
-                  <p class="text-xs text-gray-400 truncate mt-0.5">${p.category||'Other'}</p>
+                  <p class="font-bold text-sm text-gray-900 dark:text-white truncate">${esc(p.name)}</p>
+                  <p class="text-xs text-gray-400 truncate mt-0.5">${esc(p.category||'Other')}</p>
                   <p class="font-black grad-text-vp text-sm mt-1">₹${p.price?.toFixed(0)||'—'}</p>
                 </div>
               </div>`).join('')}
@@ -4886,7 +5144,7 @@ const renderNoticeFeed = (notices, filter='all') => {
           <div class="flex items-center gap-3">
             ${avatar}
             <div>
-              <p class="font-bold text-sm text-gray-900 dark:text-white">${n.authorName}</p>
+              <p class="font-bold text-sm text-gray-900 dark:text-white">${esc(n.authorName)}</p>
               <p class="text-xs text-gray-400">${ts}</p>
             </div>
           </div>
@@ -4895,8 +5153,8 @@ const renderNoticeFeed = (notices, filter='all') => {
             ${canDelete?`<button class="delete-notice-btn text-gray-300 hover:text-rose-500 transition-colors p-1 rounded-lg" data-id="${n.id}" title="Delete"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>`:''}
           </div>
         </div>
-        <h3 class="font-black text-gray-900 dark:text-white text-base mb-1">${n.title}</h3>
-        <p class="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">${n.body}</p>
+        <h3 class="font-black text-gray-900 dark:text-white text-base mb-1">${esc(n.title)}</h3>
+        <p class="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">${esc(n.body)}</p>
         <div class="mt-4 flex items-center gap-3">
           <button class="expand-replies-btn reply-count-chip ${(n.replyCount||0)>0?'has-replies':''} flex items-center gap-1.5 text-xs font-bold hover:opacity-80 transition-all" data-notice-id="${n.id}">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
@@ -5028,11 +5286,11 @@ const listenReplies = (noticeId) => {
           ${av}
           <div class="flex-grow min-w-0">
             <div class="flex items-center gap-2">
-              <span class="font-bold text-xs text-gray-800 dark:text-gray-200">${r.authorName}</span>
+              <span class="font-bold text-xs text-gray-800 dark:text-gray-200">${esc(r.authorName)}</span>
               <span class="text-xs text-gray-400">${ts}</span>
               ${mine ? `<button class="delete-reply-btn text-gray-300 hover:text-rose-500 transition-colors ml-auto text-xs" data-notice-id="${noticeId}" data-reply-id="${d.id}">✕</button>` : ''}
             </div>
-            <p class="text-sm text-gray-700 dark:text-gray-300 mt-0.5 leading-relaxed">${r.text}</p>
+            <p class="text-sm text-gray-700 dark:text-gray-300 mt-0.5 leading-relaxed">${esc(r.text)}</p>
           </div>
         </div>`;
       }).join('');
@@ -5444,6 +5702,29 @@ const renderMyListingsPageV2 = () => {
         }
       }
     });
+
+    // ── Inject Buyer Chat Inbox for seller ────────────────
+    const tab = document.getElementById('my-listings-tab');
+    if (tab && !tab.querySelector('#seller-chat-inbox-section')) {
+      const section = document.createElement('div');
+      section.id = 'seller-chat-inbox-section';
+      section.className = 'mt-10';
+      section.innerHTML = `
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl flex items-center justify-center text-lg" style="background:linear-gradient(135deg,rgba(139,92,246,0.15),rgba(6,182,212,0.1))">💬</div>
+            <div>
+              <h3 class="text-xl font-black text-gray-900 dark:text-white">Buyer Chats</h3>
+              <p class="text-xs text-gray-400">Messages from buyers about your sold items</p>
+            </div>
+          </div>
+        </div>
+        <div id="seller-chat-inbox" class="glass rounded-2xl overflow-hidden divide-y divide-vit-500/10 p-2">
+          <p class="text-gray-400 text-sm py-4 text-center">Loading chats…</p>
+        </div>`;
+      tab.appendChild(section);
+      renderSellerChatInbox();
+    }
   }, 100);
 };
 
@@ -5543,8 +5824,8 @@ const renderNotifList = (notifs) => {
     return `<div class="notif-item ${n.read ? '' : 'unread'}" data-notif-id="${n.id}" data-product-id="${n.productId || ''}" data-notif-type="${n.type || 'default'}">
       <div class="notif-icon-box ${meta.bg}">${meta.icon}</div>
       <div class="flex-grow min-w-0">
-        <p class="font-bold text-sm text-gray-900 dark:text-white">${n.title}</p>
-        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">${n.body}</p>
+        <p class="font-bold text-sm text-gray-900 dark:text-white">${esc(n.title)}</p>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">${esc(n.body)}</p>
         <p class="text-xs text-gray-300 dark:text-gray-600 mt-1">${ts}</p>
       </div>
       <div class="flex flex-col items-end gap-1 flex-shrink-0">
@@ -5703,7 +5984,282 @@ window._afterCheckoutNotify = async (purchasedItems) => {
 document.addEventListener('vitmart-user-ready', () => { startNotifListener(); });
 if (currentUser) startNotifListener();
 
-// ══════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// ORDER CHAT SYSTEM — FULL BIDIRECTIONAL REAL-TIME
+// ═══════════════════════════════════════════════════════════
+
+let _chatUnsubscribe  = () => {};
+let _inboxUnsubscribe = () => {};
+let _activeChatId     = null;
+let _activeChatRole   = null;
+let _activeChatData   = null;
+
+const chatOverlay  = document.getElementById('chat-modal-overlay');
+const chatPanel    = document.getElementById('chat-panel');
+const chatMessages = document.getElementById('chat-messages');
+const chatInput    = document.getElementById('chat-input');
+
+const BUYER_QUICK_REPLIES  = ['Hi! Where should we meet?','Is it available today?','Can we meet at the library?','What time works for you?','I will come to your hostel'];
+const SELLER_QUICK_REPLIES = ['Meet me at the main gate','I am free after 5 PM','Come to block A lobby','Let me know your hostel','Is tomorrow morning okay?'];
+
+const openChat = async (chatId) => {
+  if (!currentUser || !chatId) return;
+  let chatData = null;
+  try {
+    const snap = await db.collection('chats').doc(chatId).get();
+    if (!snap.exists) { showMessage('Chat not found.', 'error'); return; }
+    chatData = { id: snap.id, ...snap.data() };
+  } catch(err) { showMessage('Could not open chat.', 'error'); return; }
+
+  _activeChatId   = chatId;
+  _activeChatData = chatData;
+  _activeChatRole = chatData.buyerId === currentUser.uid ? 'buyer' : 'seller';
+
+  const isBuyer      = _activeChatRole === 'buyer';
+  const otherName    = isBuyer ? (chatData.sellerName  || 'Seller') : (chatData.buyerName  || 'Buyer');
+  const otherPhoto   = isBuyer ? (chatData.sellerPhoto || '')       : (chatData.buyerPhoto  || '');
+  const quickReplies = isBuyer ? BUYER_QUICK_REPLIES : SELLER_QUICK_REPLIES;
+  const unreadField  = isBuyer ? 'unreadBuyer' : 'unreadSeller';
+
+  const avatarEl = document.getElementById('chat-other-avatar');
+  const initial  = (otherName[0] || '?').toUpperCase();
+  avatarEl.src   = optimizeImage(otherPhoto, 80) || `https://placehold.co/40x40/e8e0ff/7c3aed?text=${initial}`;
+  avatarEl.onerror = () => { avatarEl.src = `https://placehold.co/40x40/e8e0ff/7c3aed?text=${initial}`; };
+  document.getElementById('chat-other-name').textContent    = otherName;
+  document.getElementById('chat-product-name').textContent  = `re: ${chatData.productName || 'Item'}`;
+
+  chatOverlay.classList.add('open');
+  chatPanel.classList.add('open');
+  chatInput.value = '';
+  chatInput.style.height = 'auto';
+  setTimeout(() => chatInput.focus(), 300);
+
+  chatMessages.innerHTML = `<div class="flex items-center justify-center h-full"><div class="animate-spin rounded-full h-8 w-8 border-b-2" style="border-color:#7c3aed"></div></div>`;
+
+  if ((chatData[unreadField] || 0) > 0) {
+    db.collection('chats').doc(chatId).update({ [unreadField]: 0 }).catch(() => {});
+  }
+
+  _chatUnsubscribe();
+  _chatUnsubscribe = db.collection('chats').doc(chatId)
+    .collection('messages').orderBy('createdAt', 'asc')
+    .onSnapshot(snap => {
+      db.collection('chats').doc(chatId).update({ [unreadField]: 0 }).catch(() => {});
+      if (snap.empty) {
+        chatMessages.innerHTML = `
+          <div class="flex flex-col items-center justify-center h-full gap-4 text-center px-4 pb-4">
+            <div class="w-16 h-16 rounded-2xl overflow-hidden shadow-lg">
+              <img src="${optimizeImage(chatData.productImage,120)||'https://placehold.co/64x64/e8e0ff/7c3aed?text=📦'}" class="w-full h-full object-cover" loading="lazy">
+            </div>
+            <div>
+              <p class="font-bold text-gray-800 dark:text-gray-100 text-sm">Chat with ${esc(otherName)}</p>
+              <p class="text-gray-400 text-xs mt-1 leading-relaxed max-w-xs">
+                ${isBuyer ? 'Say hello! Coordinate where and when to meet to collect your item.' : 'A buyer wants to coordinate pickup. Reply to let them know when and where to meet.'}
+              </p>
+            </div>
+            <div class="flex flex-wrap gap-2 justify-center">
+              ${quickReplies.map(q => `<button class="chat-quick-reply text-xs px-3 py-1.5 rounded-full font-semibold transition-all hover:-translate-y-0.5 active:scale-95" style="background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.22);color:#7c3aed" data-text="${esc(q)}">${esc(q)}</button>`).join('')}
+            </div>
+          </div>`;
+        chatMessages.querySelectorAll('.chat-quick-reply').forEach(btn => {
+          btn.addEventListener('click', () => { chatInput.value = btn.dataset.text; chatInput.focus(); });
+        });
+        return;
+      }
+      const atBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 60;
+      chatMessages.innerHTML = '';
+      let lastDate = null;
+      snap.docs.forEach(doc => {
+        const msg  = { id: doc.id, ...doc.data() };
+        const mine = msg.senderId === currentUser.uid;
+        const ts   = msg.createdAt ? msg.createdAt.toDate() : new Date();
+        const dateStr = ts.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+        const timeStr = ts.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
+        if (dateStr !== lastDate) {
+          lastDate = dateStr;
+          const d = document.createElement('div');
+          d.className = 'chat-date-divider';
+          d.textContent = dateStr;
+          chatMessages.appendChild(d);
+        }
+        const wrap = document.createElement('div');
+        wrap.className = `chat-bubble-wrap ${mine ? 'mine' : ''}`;
+        if (!mine) {
+          const av = document.createElement('img');
+          const avInit = (otherName[0]||'?').toUpperCase();
+          av.src = optimizeImage(otherPhoto, 56) || `https://placehold.co/28x28/e8e0ff/7c3aed?text=${avInit}`;
+          av.onerror = () => { av.src = `https://placehold.co/28x28/e8e0ff/7c3aed?text=${avInit}`; };
+          av.className = 'chat-avatar-sm'; av.loading = 'lazy';
+          wrap.appendChild(av);
+        }
+        const bubble = document.createElement('div');
+        bubble.className = `chat-bubble ${mine ? 'mine' : 'theirs'}`;
+        bubble.innerHTML = `${esc(msg.text)}<span class="chat-time">${timeStr}${mine ? ' ✓' : ''}</span>`;
+        wrap.appendChild(bubble);
+        chatMessages.appendChild(wrap);
+      });
+      if (atBottom || snap.docChanges().some(c => c.type === 'added' && c.doc.data().senderId === currentUser.uid)) {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+    }, err => {
+      console.error('Chat messages error:', err);
+      chatMessages.innerHTML = `<p class="text-center text-rose-400 text-sm py-8">Could not load messages.</p>`;
+    });
+};
+
+const closeChat = () => {
+  chatOverlay.classList.remove('open');
+  chatPanel.classList.remove('open');
+  _chatUnsubscribe();
+  _chatUnsubscribe = () => {};
+  _activeChatId = null; _activeChatRole = null; _activeChatData = null;
+  chatInput.value = ''; chatInput.style.height = 'auto';
+};
+
+const sendChatMessage = async () => {
+  const text = chatInput.value.trim();
+  if (!text || !_activeChatId || !currentUser || !_activeChatData) return;
+  chatInput.value = ''; chatInput.style.height = 'auto';
+  const isBuyer     = _activeChatRole === 'buyer';
+  const otherId     = isBuyer ? _activeChatData.sellerId : _activeChatData.buyerId;
+  const unreadField = isBuyer ? 'unreadSeller' : 'unreadBuyer';
+  try {
+    const chatRef = db.collection('chats').doc(_activeChatId);
+    await chatRef.collection('messages').add({
+      senderId: currentUser.uid, senderName: currentUser.displayName || 'User',
+      senderPhoto: currentUser.photoURL || '', text: filterProfanity(text),
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    await chatRef.update({
+      lastMessage: text.length > 80 ? text.slice(0,80)+'…' : text,
+      lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
+      [unreadField]: firebase.firestore.FieldValue.increment(1),
+    });
+    sendNotification(otherId, {
+      type: 'chat', title: `💬 ${currentUser.displayName || 'Someone'} sent you a message`,
+      body: text.length > 100 ? text.slice(0,100)+'…' : text,
+      productId: _activeChatData.productId || '',
+    }).catch(() => {});
+  } catch(err) {
+    console.error('Send message error:', err);
+    showMessage('Failed to send. Check your connection.', 'error');
+    chatInput.value = text;
+  }
+};
+
+chatInput?.addEventListener('input', () => {
+  chatInput.style.height = 'auto';
+  chatInput.style.height = Math.min(chatInput.scrollHeight, 100) + 'px';
+}, { passive: true });
+chatInput?.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } });
+document.getElementById('chat-send-btn')?.addEventListener('click', sendChatMessage);
+document.getElementById('close-chat-btn')?.addEventListener('click', closeChat);
+chatOverlay?.addEventListener('click', e => { if (e.target === chatOverlay) closeChat(); });
+
+document.body.addEventListener('click', e => {
+  const btn = e.target.closest('.open-order-chat-btn');
+  if (!btn) return; e.stopPropagation(); openChat(btn.dataset.chatId);
+});
+document.body.addEventListener('click', e => {
+  const btn = e.target.closest('.open-seller-chat-btn');
+  if (!btn) return; e.stopPropagation(); openChat(btn.dataset.chatId);
+});
+
+// ── Seller real-time inbox ────────────────────────────────
+let _inboxRenderTimer = null;
+const renderSellerChatInbox = () => {};  // no-op, replaced by startSellerInbox
+
+const startSellerInbox = () => {
+  if (!currentUser) return;
+  _inboxUnsubscribe();
+  _inboxUnsubscribe = db.collection('chats')
+    .where('sellerId', '==', currentUser.uid)
+    .orderBy('lastMessageAt', 'desc').limit(30)
+    .onSnapshot(snap => {
+      clearTimeout(_inboxRenderTimer);
+      _inboxRenderTimer = setTimeout(() => {
+        _renderInboxSnap(snap);
+        _updateChatBadge(snap);
+      }, 120);
+    }, err => console.warn('Inbox listener:', err.code));
+};
+
+const stopSellerInbox = () => { _inboxUnsubscribe(); _inboxUnsubscribe = () => {}; };
+
+const _renderInboxSnap = (snap) => {
+  const el = document.getElementById('seller-chat-inbox');
+  if (!el) return;
+  if (snap.empty) {
+    el.innerHTML = `<div class="flex flex-col items-center py-10 gap-2 text-center"><div class="text-4xl">💬</div><p class="text-gray-400 text-sm font-medium">No buyer chats yet.</p><p class="text-gray-400 text-xs">When a buyer purchases your item and messages you, it shows here.</p></div>`;
+    return;
+  }
+  el.innerHTML = snap.docs.map(doc => {
+    const c = { id: doc.id, ...doc.data() };
+    const unread = c.unreadSeller || 0;
+    const lastTs = c.lastMessageAt?.toDate?.() || new Date();
+    const now = new Date();
+    const timeStr = lastTs.toDateString() === now.toDateString()
+      ? lastTs.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' })
+      : lastTs.toLocaleDateString('en-IN', { day:'numeric', month:'short' });
+    const initial = (c.buyerName||'B')[0].toUpperCase();
+    return `
+      <button class="open-seller-chat-btn w-full flex items-center gap-3 p-3.5 rounded-xl transition-all text-left group hover:bg-vit-50 dark:hover:bg-vit-900/20 active:scale-[0.98]" data-chat-id="${esc(c.id)}">
+        <div class="relative flex-shrink-0">
+          <img src="${optimizeImage(c.buyerPhoto,80)||`https://placehold.co/44x44/e8e0ff/7c3aed?text=${initial}`}"
+            class="w-11 h-11 rounded-xl object-cover ring-2 ${unread>0?'ring-vit-500':'ring-transparent'}" loading="lazy"
+            onerror="this.src='https://placehold.co/44x44/e8e0ff/7c3aed?text=${initial}'">
+          ${unread>0?`<span class="chat-inbox-badge absolute -top-1 -right-1">${unread>9?'9+':unread}</span>`:''}
+        </div>
+        <div class="flex-grow min-w-0">
+          <div class="flex items-center justify-between gap-2 mb-0.5">
+            <p class="font-bold text-sm text-gray-900 dark:text-white truncate">${esc(c.buyerName||'Buyer')}</p>
+            <span class="text-xs ${unread>0?'text-vit-600 dark:text-vit-400 font-bold':'text-gray-400'} flex-shrink-0">${timeStr}</span>
+          </div>
+          <p class="text-xs text-gray-400 truncate">re: ${esc(c.productName||'Item')}</p>
+          <p class="text-xs truncate mt-0.5 ${unread>0?'text-vit-600 dark:text-vit-400 font-semibold':'text-gray-400'}">${c.lastMessage?esc(c.lastMessage):'💬 Chat started'}</p>
+        </div>
+        <svg class="w-4 h-4 text-gray-300 group-hover:text-vit-500 transition-colors flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+      </button>`;
+  }).join('');
+};
+
+const _updateChatBadge = (snap) => {
+  const badge = document.getElementById('chat-header-badge');
+  if (!badge) return;
+  const total = snap.docs.reduce((s,d) => s + (d.data().unreadSeller||0), 0);
+  badge.textContent = total > 9 ? '9+' : String(total);
+  badge.style.display = total > 0 ? 'flex' : 'none';
+};
+
+const injectChatBellIntoHeader = () => {
+  if (!currentUser || document.getElementById('chat-bell-btn')) return;
+  const container = document.getElementById('header-actions-container');
+  if (!container) return;
+  const wrapper = document.createElement('div');
+  wrapper.style.position = 'relative';
+  wrapper.innerHTML = `
+    <button id="chat-bell-btn" aria-label="Chats" class="icon-btn p-2 rounded-xl glass hover:shadow-lg hover:shadow-vit-500/20 transition-all duration-200" data-tooltip="Buyer Chats">
+      <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+      <span id="chat-header-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#f43f5e;color:white;font-size:10px;font-weight:800;min-width:16px;height:16px;border-radius:99px;align-items:center;justify-content:center;padding:0 3px;line-height:1;">0</span>
+    </button>`;
+  container.insertBefore(wrapper, container.firstChild);
+  document.getElementById('chat-bell-btn')?.addEventListener('click', () => {
+    setActiveTab('my-listings');
+    setTimeout(() => { document.getElementById('seller-chat-inbox-section')?.scrollIntoView({ behavior:'smooth', block:'start' }); }, 500);
+  });
+};
+
+document.addEventListener('vitmart-user-ready', () => {
+  startSellerInbox();
+  setTimeout(injectChatBellIntoHeader, 300);
+});
+if (currentUser) { startSellerInbox(); setTimeout(injectChatBellIntoHeader, 300); }
+
+if (typeof NOTIF_ICONS !== 'undefined') {
+  NOTIF_ICONS['chat'] = { bg:'bg-blue-100 dark:bg-blue-900/40', icon:'💬' };
+}
+
+
 // OPTIMISATION: Lazy-load all dynamic images
 // ══════════════════════════════════════════════
 const applyLazyLoad = () => {
@@ -5788,3 +6344,55 @@ if (window.matchMedia('(max-width: 640px)').matches) {
 </script>
 </body>
 </html>
+
+<script>
+// ── Service Worker registration ───────────────────────────────────────────
+// Caches the page shell + static assets so repeat visits load instantly
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    // Inline SW as a Blob so we don't need a separate sw.js file
+    const swCode = `
+const CACHE = 'vitmart-v1';
+const PRECACHE = ['/'];
+
+self.addEventListener('install', e => {
+  e.waitUntil(
+    caches.open(CACHE).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+    ).then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', e => {
+  const url = new URL(e.request.url);
+  // Only cache same-origin GET requests — never Firebase/Cloudinary API calls
+  if (e.request.method !== 'GET') return;
+  if (url.hostname !== self.location.hostname) return;
+
+  e.respondWith(
+    caches.open(CACHE).then(async cache => {
+      const cached = await cache.match(e.request);
+      const fetchPromise = fetch(e.request).then(res => {
+        if (res.ok) cache.put(e.request, res.clone());
+        return res;
+      }).catch(() => cached); // fall back to cache on network failure
+      // Return cached instantly, update in background (stale-while-revalidate)
+      return cached || fetchPromise;
+    })
+  );
+});
+`;
+    const blob = new Blob([swCode], { type: 'application/javascript' });
+    const swUrl = URL.createObjectURL(blob);
+    navigator.serviceWorker.register(swUrl)
+      .then(() => console.log('[ViTMART] Service Worker registered ✓'))
+      .catch(err => console.warn('[ViTMART] SW registration skipped:', err.message));
+  });
+}
+</script>
