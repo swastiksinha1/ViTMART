@@ -1115,7 +1115,16 @@ tailwind.config = {
       <p id="chat-other-name" class="font-black text-gray-900 dark:text-white text-sm truncate"></p>
       <p id="chat-product-name" class="text-xs text-gray-400 truncate"></p>
     </div>
-    <button id="close-chat-btn" class="w-8 h-8 rounded-xl glass flex items-center justify-center text-gray-500 hover:text-rose-500 transition-colors flex-shrink-0 text-lg">&times;</button>
+    <!-- Delete chat button -->
+    <button id="delete-chat-btn" title="Delete this chat"
+      class="w-8 h-8 rounded-xl flex items-center justify-center text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all flex-shrink-0">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+      </svg>
+    </button>
+    <button id="close-chat-btn"
+      class="w-8 h-8 rounded-xl glass flex items-center justify-center text-gray-500 hover:text-rose-500 transition-colors flex-shrink-0 text-lg">&times;</button>
   </div>
   <!-- Messages -->
   <div id="chat-messages" class="chat-messages">
@@ -6033,12 +6042,21 @@ const SELLER_QUICK_REPLIES = ['Meet me at the main gate','I am free after 5 PM',
 
 const openChat = async (chatId) => {
   if (!currentUser || !chatId) return;
+
+  // Fetch the chat document first
   let chatData = null;
   try {
     const snap = await db.collection('chats').doc(chatId).get();
-    if (!snap.exists) { showMessage('Chat not found.', 'error'); return; }
+    if (!snap.exists) {
+      showMessage('Chat not found. Place an order first to start chatting.', 'error');
+      return;
+    }
     chatData = { id: snap.id, ...snap.data() };
-  } catch(err) { showMessage('Could not open chat.', 'error'); return; }
+  } catch(err) {
+    console.error('openChat fetch error:', err);
+    showMessage('Could not open chat: ' + (err.message || 'Check your connection.'), 'error');
+    return;
+  }
 
   _activeChatId   = chatId;
   _activeChatData = chatData;
@@ -6050,140 +6068,254 @@ const openChat = async (chatId) => {
   const quickReplies = isBuyer ? BUYER_QUICK_REPLIES : SELLER_QUICK_REPLIES;
   const unreadField  = isBuyer ? 'unreadBuyer' : 'unreadSeller';
 
+  // Populate header
   const avatarEl = document.getElementById('chat-other-avatar');
   const initial  = (otherName[0] || '?').toUpperCase();
-  avatarEl.src   = optimizeImage(otherPhoto, 80) || `https://placehold.co/40x40/e8e0ff/7c3aed?text=${initial}`;
-  avatarEl.onerror = () => { avatarEl.src = `https://placehold.co/40x40/e8e0ff/7c3aed?text=${initial}`; };
-  document.getElementById('chat-other-name').textContent    = otherName;
-  document.getElementById('chat-product-name').textContent  = `re: ${chatData.productName || 'Item'}`;
+  if (avatarEl) {
+    avatarEl.src = optimizeImage(otherPhoto, 80) || `https://placehold.co/40x40/e8e0ff/7c3aed?text=${initial}`;
+    avatarEl.onerror = () => { avatarEl.src = `https://placehold.co/40x40/e8e0ff/7c3aed?text=${initial}`; };
+  }
+  const nameEl    = document.getElementById('chat-other-name');
+  const productEl = document.getElementById('chat-product-name');
+  if (nameEl)    nameEl.textContent    = otherName;
+  if (productEl) productEl.textContent = `📦 ${chatData.productName || 'Item'}`;
 
-  chatOverlay.classList.add('open');
-  chatPanel.classList.add('open');
-  chatInput.value = '';
-  chatInput.style.height = 'auto';
-  setTimeout(() => chatInput.focus(), 300);
+  // Show panel
+  const overlay = document.getElementById('chat-modal-overlay');
+  const panel   = document.getElementById('chat-panel');
+  const msgs    = document.getElementById('chat-messages');
+  const inp     = document.getElementById('chat-input');
+  if (!panel || !msgs) { console.error('Chat panel elements missing'); return; }
 
-  chatMessages.innerHTML = `<div class="flex items-center justify-center h-full"><div class="animate-spin rounded-full h-8 w-8 border-b-2" style="border-color:#7c3aed"></div></div>`;
+  overlay?.classList.add('open');
+  panel.classList.add('open');
+  if (inp) { inp.value = ''; inp.style.height = 'auto'; }
+  setTimeout(() => inp?.focus(), 350);
 
+  // Show spinner
+  msgs.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:12px">
+      <div style="width:32px;height:32px;border-radius:50%;border:3px solid rgba(124,58,237,0.15);border-top-color:#7c3aed;animation:loader-spin 0.8s linear infinite"></div>
+      <p style="font-size:12px;color:#9ca3af">Loading messages…</p>
+    </div>`;
+
+  // Clear unread
   if ((chatData[unreadField] || 0) > 0) {
     db.collection('chats').doc(chatId).update({ [unreadField]: 0 }).catch(() => {});
   }
 
+  // Timeout — if Firestore doesn't respond in 6s show a helpful error
+  let _listenerFired = false;
+  const _timeoutId = setTimeout(() => {
+    if (!_listenerFired && msgs) {
+      msgs.innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;padding:24px;text-align:center">
+          <div style="font-size:2rem">⚠️</div>
+          <p style="font-size:13px;font-weight:700;color:#f43f5e">Could not load messages</p>
+          <p style="font-size:11px;color:#9ca3af;line-height:1.6">This is usually a Firestore index issue.<br>
+            Add this index in Firebase Console:<br>
+            <code style="background:rgba(124,58,237,0.1);padding:2px 6px;border-radius:4px;font-size:10px">chats/{id}/messages → createdAt ASC</code>
+          </p>
+          <button onclick="openChat('${chatId}')" style="padding:8px 20px;background:linear-gradient(135deg,#7c3aed,#06b6d4);color:white;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;border:none">
+            Retry
+          </button>
+        </div>`;
+    }
+  }, 6000);
+
+  // Unsubscribe previous listener
   _chatUnsubscribe();
+
+  // ── KEY FIX: No orderBy → no index needed. Sort client-side. ──
   _chatUnsubscribe = db.collection('chats').doc(chatId)
-    .collection('messages').orderBy('createdAt', 'asc')
-    .onSnapshot(snap => {
+    .collection('messages')
+    .onSnapshot({ includeMetadataChanges: false }, snap => {
+      _listenerFired = true;
+      clearTimeout(_timeoutId);
+
+      // Clear unread every time new messages arrive
       db.collection('chats').doc(chatId).update({ [unreadField]: 0 }).catch(() => {});
-      if (snap.empty) {
-        chatMessages.innerHTML = `
-          <div class="flex flex-col items-center justify-center h-full gap-4 text-center px-4 pb-4">
-            <div class="w-16 h-16 rounded-2xl overflow-hidden shadow-lg">
-              <img src="${optimizeImage(chatData.productImage,120)||'https://placehold.co/64x64/e8e0ff/7c3aed?text=📦'}" class="w-full h-full object-cover" loading="lazy">
+
+      // Sort docs by createdAt client-side (avoids index requirement)
+      const sorted = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => {
+          const ta = a.createdAt?.toMillis?.() || a.createdAt?.seconds * 1000 || 0;
+          const tb = b.createdAt?.toMillis?.() || b.createdAt?.seconds * 1000 || 0;
+          return ta - tb;
+        });
+
+      if (sorted.length === 0) {
+        // Empty — show welcome + quick replies
+        msgs.innerHTML = `
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px;text-align:center;padding:20px">
+            <div style="width:60px;height:60px;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(124,58,237,0.2);flex-shrink:0">
+              <img src="${optimizeImage(chatData.productImage,120)||'https://placehold.co/60x60/e8e0ff/7c3aed?text=📦'}"
+                style="width:100%;height:100%;object-fit:cover" loading="lazy">
             </div>
             <div>
-              <p class="font-bold text-gray-800 dark:text-gray-100 text-sm">Chat with ${esc(otherName)}</p>
-              <p class="text-gray-400 text-xs mt-1 leading-relaxed max-w-xs">
-                ${isBuyer ? 'Say hello! Coordinate where and when to meet to collect your item.' : 'A buyer wants to coordinate pickup. Reply to let them know when and where to meet.'}
+              <p style="font-weight:800;font-size:14px" class="text-gray-800 dark:text-gray-100">Chat with ${esc(otherName)}</p>
+              <p style="font-size:12px;margin-top:4px;line-height:1.6;max-width:220px" class="text-gray-400">
+                ${isBuyer ? 'Say hello! Coordinate where to meet to collect your item.' : 'A buyer wants to pick up their item. Reply to coordinate meetup.'}
               </p>
             </div>
-            <div class="flex flex-wrap gap-2 justify-center">
-              ${quickReplies.map(q => `<button class="chat-quick-reply text-xs px-3 py-1.5 rounded-full font-semibold transition-all hover:-translate-y-0.5 active:scale-95" style="background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.22);color:#7c3aed" data-text="${esc(q)}">${esc(q)}</button>`).join('')}
+            <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center">
+              ${quickReplies.map(q =>
+                `<button class="chat-quick-reply" style="background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.22);color:#7c3aed;padding:6px 12px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;transition:all 0.15s" data-text="${esc(q)}">${esc(q)}</button>`
+              ).join('')}
             </div>
           </div>`;
-        chatMessages.querySelectorAll('.chat-quick-reply').forEach(btn => {
-          btn.addEventListener('click', () => { chatInput.value = btn.dataset.text; chatInput.focus(); });
+        msgs.querySelectorAll('.chat-quick-reply').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const i = document.getElementById('chat-input');
+            if (i) { i.value = btn.dataset.text; i.focus(); }
+          });
         });
         return;
       }
-      const atBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 60;
-      chatMessages.innerHTML = '';
+
+      // Render messages
+      const atBottom = msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 80;
+      msgs.innerHTML = '';
       let lastDate = null;
-      snap.docs.forEach(doc => {
-        const msg  = { id: doc.id, ...doc.data() };
-        const mine = msg.senderId === currentUser.uid;
-        const ts   = msg.createdAt ? msg.createdAt.toDate() : new Date();
+
+      sorted.forEach(msg => {
+        const mine    = msg.senderId === currentUser.uid;
+        const ts      = msg.createdAt?.toDate?.() || new Date(msg.createdAt?.seconds * 1000 || Date.now());
         const dateStr = ts.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
         const timeStr = ts.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
+
+        // Date divider
         if (dateStr !== lastDate) {
           lastDate = dateStr;
-          const d = document.createElement('div');
-          d.className = 'chat-date-divider';
-          d.textContent = dateStr;
-          chatMessages.appendChild(d);
+          const div = document.createElement('div');
+          div.className = 'chat-date-divider';
+          div.textContent = dateStr;
+          msgs.appendChild(div);
         }
+
         const wrap = document.createElement('div');
         wrap.className = `chat-bubble-wrap ${mine ? 'mine' : ''}`;
+
         if (!mine) {
           const av = document.createElement('img');
-          const avInit = (otherName[0]||'?').toUpperCase();
+          const avInit = (otherName[0] || '?').toUpperCase();
           av.src = optimizeImage(otherPhoto, 56) || `https://placehold.co/28x28/e8e0ff/7c3aed?text=${avInit}`;
           av.onerror = () => { av.src = `https://placehold.co/28x28/e8e0ff/7c3aed?text=${avInit}`; };
-          av.className = 'chat-avatar-sm'; av.loading = 'lazy';
+          av.className = 'chat-avatar-sm';
+          av.loading = 'lazy';
           wrap.appendChild(av);
         }
+
         const bubble = document.createElement('div');
         bubble.className = `chat-bubble ${mine ? 'mine' : 'theirs'}`;
         bubble.innerHTML = `${esc(msg.text)}<span class="chat-time">${timeStr}${mine ? ' ✓' : ''}</span>`;
         wrap.appendChild(bubble);
-        chatMessages.appendChild(wrap);
+        msgs.appendChild(wrap);
       });
-      if (atBottom || snap.docChanges().some(c => c.type === 'added' && c.doc.data().senderId === currentUser.uid)) {
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-      }
+
+      // Always scroll to bottom when messages load or new ones arrive
+      requestAnimationFrame(() => { msgs.scrollTop = msgs.scrollHeight; });
+
     }, err => {
-      console.error('Chat messages error:', err);
-      chatMessages.innerHTML = `<p class="text-center text-rose-400 text-sm py-8">Could not load messages.</p>`;
+      _listenerFired = true;
+      clearTimeout(_timeoutId);
+      console.error('Chat messages listener error:', err.code, err.message);
+      if (msgs) {
+        msgs.innerHTML = `
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;padding:24px;text-align:center">
+            <div style="font-size:2rem">❌</div>
+            <p style="font-size:13px;font-weight:700" class="text-rose-500">Failed to load messages</p>
+            <p style="font-size:11px;color:#9ca3af">Error: ${err.code || err.message}</p>
+            <button onclick="openChat('${chatId}')" style="padding:8px 20px;background:linear-gradient(135deg,#7c3aed,#06b6d4);color:white;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;border:none;margin-top:4px">
+              🔄 Retry
+            </button>
+          </div>`;
+      }
     });
 };
 
+// Expose openChat globally so the inline retry button works
+window.openChat = openChat;
+
 const closeChat = () => {
-  chatOverlay.classList.remove('open');
-  chatPanel.classList.remove('open');
+  document.getElementById('chat-modal-overlay')?.classList.remove('open');
+  document.getElementById('chat-panel')?.classList.remove('open');
   _chatUnsubscribe();
   _chatUnsubscribe = () => {};
   _activeChatId = null; _activeChatRole = null; _activeChatData = null;
-  chatInput.value = ''; chatInput.style.height = 'auto';
+  const inp = document.getElementById('chat-input');
+  if (inp) { inp.value = ''; inp.style.height = 'auto'; }
 };
 
 const sendChatMessage = async () => {
-  const text = chatInput.value.trim();
+  const inp  = document.getElementById('chat-input');
+  const text = inp?.value.trim();
   if (!text || !_activeChatId || !currentUser || !_activeChatData) return;
-  chatInput.value = ''; chatInput.style.height = 'auto';
+
+  // Optimistic clear
+  if (inp) { inp.value = ''; inp.style.height = 'auto'; }
+
   const isBuyer     = _activeChatRole === 'buyer';
   const otherId     = isBuyer ? _activeChatData.sellerId : _activeChatData.buyerId;
   const unreadField = isBuyer ? 'unreadSeller' : 'unreadBuyer';
+
   try {
     const chatRef = db.collection('chats').doc(_activeChatId);
+
     await chatRef.collection('messages').add({
-      senderId: currentUser.uid, senderName: currentUser.displayName || 'User',
-      senderPhoto: currentUser.photoURL || '', text: filterProfanity(text),
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      senderId:    currentUser.uid,
+      senderName:  currentUser.displayName || 'User',
+      senderPhoto: currentUser.photoURL    || '',
+      text:        filterProfanity(text),
+      createdAt:   firebase.firestore.FieldValue.serverTimestamp(),
     });
+
     await chatRef.update({
-      lastMessage: text.length > 80 ? text.slice(0,80)+'…' : text,
-      lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
-      [unreadField]: firebase.firestore.FieldValue.increment(1),
+      lastMessage:    text.length > 80 ? text.slice(0, 80) + '…' : text,
+      lastMessageAt:  firebase.firestore.FieldValue.serverTimestamp(),
+      [unreadField]:  firebase.firestore.FieldValue.increment(1),
     });
+
     sendNotification(otherId, {
-      type: 'chat', title: `💬 ${currentUser.displayName || 'Someone'} sent you a message`,
-      body: text.length > 100 ? text.slice(0,100)+'…' : text,
+      type:      'chat',
+      title:     `💬 ${currentUser.displayName || 'Someone'} sent you a message`,
+      body:      text.length > 100 ? text.slice(0, 100) + '…' : text,
       productId: _activeChatData.productId || '',
     }).catch(() => {});
+
   } catch(err) {
-    console.error('Send message error:', err);
-    showMessage('Failed to send. Check your connection.', 'error');
-    chatInput.value = text;
+    console.error('sendChatMessage error:', err.code, err.message);
+    showMessage('Message not sent: ' + (err.code === 'permission-denied' ? 'Permission denied — check Firestore rules.' : err.message), 'error');
+    if (inp) inp.value = text; // restore on failure
   }
 };
 
-chatInput?.addEventListener('input', () => {
-  chatInput.style.height = 'auto';
-  chatInput.style.height = Math.min(chatInput.scrollHeight, 100) + 'px';
+// ── Event listeners ───────────────────────────────────────
+document.getElementById('chat-input')?.addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 100) + 'px';
 }, { passive: true });
-chatInput?.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } });
+
+document.getElementById('chat-input')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
+});
+
 document.getElementById('chat-send-btn')?.addEventListener('click', sendChatMessage);
 document.getElementById('close-chat-btn')?.addEventListener('click', closeChat);
-chatOverlay?.addEventListener('click', e => { if (e.target === chatOverlay) closeChat(); });
+document.getElementById('chat-modal-overlay')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('chat-modal-overlay')) closeChat();
+});
+
+// Delete button in chat header — use event delegation since deleteChat defined later
+document.body.addEventListener('click', e => {
+  if (!e.target.closest('#delete-chat-btn')) return;
+  if (!_activeChatId || !_activeChatData) return;
+  const isBuyer   = _activeChatRole === 'buyer';
+  const otherName = isBuyer ? (_activeChatData.sellerName||'Seller') : (_activeChatData.buyerName||'Buyer');
+  // deleteChat defined later in this script — called via window scope
+  if (typeof deleteChat === 'function') deleteChat(_activeChatId, otherName);
+});
 
 document.body.addEventListener('click', e => {
   const btn = e.target.closest('.open-order-chat-btn');
@@ -6280,8 +6412,8 @@ const _loadFabInbox = () => {
   if (!currentUser) return;
   _inboxUnsubscribe();
 
-  // Listen to ALL chats where user is buyer OR seller
-  // Firestore doesn't support OR queries across fields, so run two parallel listeners
+  // Two parallel listeners (Firestore can't do OR queries across fields)
+  // No orderBy = no composite index needed → sort client-side
   let buyerSnap  = null;
   let sellerSnap = null;
 
@@ -6290,15 +6422,17 @@ const _loadFabInbox = () => {
     const allDocs = [
       ...(buyerSnap  ? buyerSnap.docs  : []),
       ...(sellerSnap ? sellerSnap.docs : []),
-    ].sort((a,b) => {
-      const ta = a.data().lastMessageAt?.toMillis?.() || 0;
-      const tb = b.data().lastMessageAt?.toMillis?.() || 0;
+    ];
+    // Dedupe by doc id
+    const seen = new Set();
+    const deduped = allDocs.filter(d => { if (seen.has(d.id)) return false; seen.add(d.id); return true; });
+    // Sort by lastMessageAt desc — client-side (no index needed)
+    deduped.sort((a, b) => {
+      const ta = a.data().lastMessageAt?.toMillis?.() || a.data().lastMessageAt?.seconds * 1000 || 0;
+      const tb = b.data().lastMessageAt?.toMillis?.() || b.data().lastMessageAt?.seconds * 1000 || 0;
       return tb - ta;
     });
-    // Dedupe
-    const seen = new Set();
-    const merged = allDocs.filter(d => { if (seen.has(d.id)) return false; seen.add(d.id); return true; });
-    _fabChatsSnap = { docs: merged };
+    _fabChatsSnap = { docs: deduped };
     clearTimeout(_inboxRenderTimer);
     _inboxRenderTimer = setTimeout(() => {
       _renderFabInbox(_fabChatsSnap, window._getFabActiveTab?.() || 'buyer');
@@ -6308,14 +6442,14 @@ const _loadFabInbox = () => {
   };
 
   const unsub1 = db.collection('chats')
-    .where('buyerId',  '==', currentUser.uid)
-    .orderBy('lastMessageAt','desc').limit(20)
-    .onSnapshot(s => { buyerSnap  = s; merge(); }, err => console.warn('Buyer chats:', err.code));
+    .where('buyerId', '==', currentUser.uid)
+    .limit(30)
+    .onSnapshot(s => { buyerSnap  = s; merge(); }, err => console.warn('Buyer chats listener:', err.code));
 
   const unsub2 = db.collection('chats')
     .where('sellerId', '==', currentUser.uid)
-    .orderBy('lastMessageAt','desc').limit(20)
-    .onSnapshot(s => { sellerSnap = s; merge(); }, err => console.warn('Seller chats:', err.code));
+    .limit(30)
+    .onSnapshot(s => { sellerSnap = s; merge(); }, err => console.warn('Seller chats listener:', err.code));
 
   _inboxUnsubscribe = () => { unsub1(); unsub2(); };
 };
@@ -6367,33 +6501,39 @@ const _renderFabInbox = (snapData, tab) => {
     const otherPhoto = isBuyer ? (c.sellerPhoto||'')      : (c.buyerPhoto||'');
     const initial    = (otherName[0]||'?').toUpperCase();
     const timeStr    = _chatTime(c.lastMessageAt);
-    const isOnline   = false; // could add presence later
 
     return `
-      <div class="chat-fab-inbox-item open-chat-from-fab" data-chat-id="${esc(c.id)}"
-        style="cursor:pointer;${unread>0?'background:rgba(139,92,246,0.04)':''}">
-        <div style="position:relative;flex-shrink:0">
-          <img src="${optimizeImage(otherPhoto,80)||`https://placehold.co/44x44/e8e0ff/7c3aed?text=${initial}`}"
-            style="width:44px;height:44px;border-radius:12px;object-fit:cover;${unread>0?'outline:2px solid #7c3aed;outline-offset:1px':''}"
-            loading="lazy"
-            onerror="this.src='https://placehold.co/44x44/e8e0ff/7c3aed?text=${initial}'">
-          ${isOnline?`<span style="position:absolute;bottom:0;right:0;width:10px;height:10px;background:#34d399;border-radius:50%;border:2px solid white"></span>`:''}
-          ${unread>0?`<span class="chat-inbox-badge" style="position:absolute;top:-4px;right:-4px">${unread>9?'9+':unread}</span>`:''}
-        </div>
-        <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px">
-            <p style="font-weight:${unread>0?800:600};font-size:0.8125rem;color:${unread>0?'var(--vit-primary,#7c3aed)':'inherit'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px"
-              class="text-gray-900 dark:text-white">${esc(otherName)}</p>
-            <span style="font-size:10px;color:${unread>0?'#7c3aed':'#9ca3af'};flex-shrink:0;font-weight:${unread>0?700:400}">${timeStr}</span>
+      <div class="chat-fab-inbox-item" style="${unread>0?'background:rgba(139,92,246,0.04)':''}">
+        <div class="open-chat-from-fab" data-chat-id="${esc(c.id)}"
+          style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer;padding:2px 0">
+          <div style="position:relative;flex-shrink:0">
+            <img src="${optimizeImage(otherPhoto,80)||`https://placehold.co/44x44/e8e0ff/7c3aed?text=${initial}`}"
+              style="width:44px;height:44px;border-radius:12px;object-fit:cover;${unread>0?'outline:2px solid #7c3aed;outline-offset:1px':''}"
+              loading="lazy"
+              onerror="this.src='https://placehold.co/44x44/e8e0ff/7c3aed?text=${initial}'">
+            ${unread>0?`<span class="chat-inbox-badge" style="position:absolute;top:-4px;right:-4px">${unread>9?'9+':unread}</span>`:''}
           </div>
-          <p style="font-size:11px;color:#9ca3af;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-            class="text-gray-400">re: ${esc(c.productName||'Item')}</p>
-          <p style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:${unread>0?600:400}"
-            class="${unread>0?'text-vit-600 dark:text-vit-400':'text-gray-400'}">${c.lastMessage?esc(c.lastMessage):'💬 Say hello!'}</p>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px">
+              <p style="font-weight:${unread>0?800:600};font-size:0.8125rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px"
+                class="${unread>0?'text-vit-600 dark:text-vit-400':'text-gray-900 dark:text-white'}">${esc(otherName)}</p>
+              <span style="font-size:10px;flex-shrink:0;font-weight:${unread>0?700:400}"
+                class="${unread>0?'text-vit-600 dark:text-vit-400':'text-gray-400'}">${timeStr}</span>
+            </div>
+            <p style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" class="text-gray-400">re: ${esc(c.productName||'Item')}</p>
+            <p style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:${unread>0?600:400}"
+              class="${unread>0?'text-vit-600 dark:text-vit-400':'text-gray-400'}">${c.lastMessage?esc(c.lastMessage):'💬 Say hello!'}</p>
+          </div>
         </div>
-        <svg style="width:14px;height:14px;flex-shrink:0;color:#d1d5db" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-        </svg>
+        <!-- Delete chat button -->
+        <button class="delete-chat-from-fab flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-xl text-gray-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all"
+          data-chat-id="${esc(c.id)}" data-other-name="${esc(otherName)}" title="Delete chat"
+          style="margin-left:4px">
+          <svg style="width:14px;height:14px" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+          </svg>
+        </button>
       </div>`;
   }).join('');
 };
@@ -6413,23 +6553,31 @@ const _updateMyListingsInbox = (snapData) => {
     const initial = (c.buyerName||'B')[0].toUpperCase();
     const timeStr = _chatTime(c.lastMessageAt);
     return `
-      <button class="open-seller-chat-btn w-full flex items-center gap-3 p-3.5 rounded-xl transition-all text-left group hover:bg-vit-50 dark:hover:bg-vit-900/20 active:scale-[0.98]" data-chat-id="${esc(c.id)}">
-        <div class="relative flex-shrink-0">
-          <img src="${optimizeImage(c.buyerPhoto,80)||`https://placehold.co/44x44/e8e0ff/7c3aed?text=${initial}`}"
-            class="w-11 h-11 rounded-xl object-cover ring-2 ${unread>0?'ring-vit-500':'ring-transparent'}" loading="lazy"
-            onerror="this.src='https://placehold.co/44x44/e8e0ff/7c3aed?text=${initial}'">
-          ${unread>0?`<span class="chat-inbox-badge absolute -top-1 -right-1">${unread>9?'9+':unread}</span>`:''}
-        </div>
-        <div class="flex-grow min-w-0">
-          <div class="flex items-center justify-between gap-2 mb-0.5">
-            <p class="font-bold text-sm text-gray-900 dark:text-white truncate">${esc(c.buyerName||'Buyer')}</p>
-            <span class="text-xs ${unread>0?'text-vit-600 dark:text-vit-400 font-bold':'text-gray-400'} flex-shrink-0">${timeStr}</span>
+      <div class="flex items-center gap-1 hover:bg-vit-50 dark:hover:bg-vit-900/20 rounded-xl transition-all pr-1">
+        <button class="open-seller-chat-btn flex-1 flex items-center gap-3 p-3.5 text-left group active:scale-[0.98]" data-chat-id="${esc(c.id)}">
+          <div class="relative flex-shrink-0">
+            <img src="${optimizeImage(c.buyerPhoto,80)||`https://placehold.co/44x44/e8e0ff/7c3aed?text=${initial}`}"
+              class="w-11 h-11 rounded-xl object-cover ring-2 ${unread>0?'ring-vit-500':'ring-transparent'}" loading="lazy"
+              onerror="this.src='https://placehold.co/44x44/e8e0ff/7c3aed?text=${initial}'">
+            ${unread>0?`<span class="chat-inbox-badge absolute -top-1 -right-1">${unread>9?'9+':unread}</span>`:''}
           </div>
-          <p class="text-xs text-gray-400 truncate">re: ${esc(c.productName||'Item')}</p>
-          <p class="text-xs truncate mt-0.5 ${unread>0?'text-vit-600 dark:text-vit-400 font-semibold':'text-gray-400'}">${c.lastMessage?esc(c.lastMessage):'💬 Chat started'}</p>
-        </div>
-        <svg class="w-4 h-4 text-gray-300 group-hover:text-vit-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-      </button>`;
+          <div class="flex-grow min-w-0">
+            <div class="flex items-center justify-between gap-2 mb-0.5">
+              <p class="font-bold text-sm text-gray-900 dark:text-white truncate">${esc(c.buyerName||'Buyer')}</p>
+              <span class="text-xs ${unread>0?'text-vit-600 dark:text-vit-400 font-bold':'text-gray-400'} flex-shrink-0">${timeStr}</span>
+            </div>
+            <p class="text-xs text-gray-400 truncate">re: ${esc(c.productName||'Item')}</p>
+            <p class="text-xs truncate mt-0.5 ${unread>0?'text-vit-600 dark:text-vit-400 font-semibold':'text-gray-400'}">${c.lastMessage?esc(c.lastMessage):'💬 Chat started'}</p>
+          </div>
+        </button>
+        <button class="delete-chat-from-fab flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-xl text-gray-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all"
+          data-chat-id="${esc(c.id)}" data-other-name="${esc(c.buyerName||'Buyer')}" title="Delete chat">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+          </svg>
+        </button>
+      </div>`;
   }).join('');
 };
 
@@ -6445,25 +6593,90 @@ const _updateFabBadge = (snapData) => {
   badge.style.display = total > 0 ? 'flex' : 'none';
 };
 
-// Click handler — open a chat from the FAB inbox
+// ── Delete chat ───────────────────────────────────────────
+const deleteChat = async (chatId, otherName) => {
+  if (!currentUser || !chatId) return;
+
+  showConfirmModal(
+    `Delete your conversation with ${otherName}? This removes the chat for you only — the other person can still see it.`,
+    async () => {
+      try {
+        // If this is the active chat, close it first
+        if (_activeChatId === chatId) closeChat();
+
+        // Animate item out of FAB list
+        const item = document.querySelector(`[data-chat-id="${chatId}"]`)?.closest('.chat-fab-inbox-item, .flex.items-center.gap-1');
+        if (item) {
+          item.style.transition = 'opacity 0.2s, transform 0.2s, max-height 0.25s, padding 0.25s';
+          item.style.opacity = '0';
+          item.style.transform = 'translateX(20px)';
+          item.style.overflow = 'hidden';
+          item.style.maxHeight = item.offsetHeight + 'px';
+          setTimeout(() => {
+            item.style.maxHeight = '0';
+            item.style.padding = '0';
+          }, 180);
+          setTimeout(() => item.remove(), 380);
+        }
+
+        // Delete all messages in sub-collection first (in batches of 100)
+        const msgSnap = await db.collection('chats').doc(chatId).collection('messages').limit(100).get();
+        if (!msgSnap.empty) {
+          const batch = db.batch();
+          msgSnap.forEach(d => batch.delete(d.ref));
+          await batch.commit();
+        }
+
+        // Delete the chat document itself
+        await db.collection('chats').doc(chatId).delete();
+
+        showMessage('Chat deleted.', 'success');
+      } catch(err) {
+        console.error('deleteChat error:', err.code, err.message);
+        if (err.code === 'permission-denied') {
+          showMessage('Permission denied — update Firestore rules to allow chat deletion.', 'error');
+        } else {
+          showMessage('Could not delete chat: ' + err.message, 'error');
+        }
+      }
+    }
+  );
+};
+
+// ── Click handler — open chat from FAB inbox ──────────────
 document.body.addEventListener('click', e => {
+  // Delete button takes priority
+  const delBtn = e.target.closest('.delete-chat-from-fab');
+  if (delBtn) {
+    e.stopPropagation();
+    deleteChat(delBtn.dataset.chatId, delBtn.dataset.otherName || 'this person');
+    return;
+  }
+
+  // Open chat row
   const item = e.target.closest('.open-chat-from-fab');
   if (!item) return;
   e.stopPropagation();
-  const chatId = item.dataset.chatId;
-  // Close FAB inbox, open the full chat panel
   document.getElementById('order-chat-fab-container')?.classList.remove('open');
-  openChat(chatId);
+  openChat(item.dataset.chatId);
 });
 
-// initialise FAB + start real-time listener
+// ── Delete chat from header button ───────────────────────
+document.getElementById('delete-chat-btn')?.addEventListener('click', () => {
+  if (!_activeChatId || !_activeChatData) return;
+  const isBuyer = _activeChatRole === 'buyer';
+  const otherName = isBuyer ? (_activeChatData.sellerName||'Seller') : (_activeChatData.buyerName||'Buyer');
+  deleteChat(_activeChatId, otherName);
+});
+
+// ── initialise FAB + start real-time listener ─────────────
 const startSellerInbox = () => { _loadFabInbox(); };
 const stopSellerInbox  = () => { _inboxUnsubscribe(); _inboxUnsubscribe = () => {}; };
 
 const injectChatFab = () => {
   if (!currentUser) return;
   _buildFabHTML();
-  _loadFabInbox();
+  _loadFabInbox(); // starts real-time listener immediately (badge updates in background)
 };
 
 document.addEventListener('vitmart-user-ready', () => { injectChatFab(); });
@@ -6476,6 +6689,8 @@ document.getElementById('chat-header-badge')?.closest('div')?.remove();
 if (typeof NOTIF_ICONS !== 'undefined') {
   NOTIF_ICONS['chat'] = { bg:'bg-blue-100 dark:bg-blue-900/40', icon:'💬' };
 }
+
+
 
 
 
