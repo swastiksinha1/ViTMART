@@ -690,10 +690,38 @@ tailwind.config = {
   .wave-top { overflow:hidden; line-height:0; }
   .wave-top svg { display:block; width:100%; }
 
-  /* === CHAT === */
-  #popup-chat-widget { position:fixed; bottom:2rem; right:2rem; z-index:45; bottom: calc(2rem + env(safe-area-inset-bottom, 0px)); }
-  #popup-chat-container { position:fixed; bottom:6rem; right:2rem; width:90%; max-width:400px; height:70vh; max-height:520px; z-index:45; transition:transform 0.38s cubic-bezier(0.34,1.1,0.64,1), opacity 0.3s; transform:translateY(22px) scale(0.92); opacity:0; pointer-events:none; bottom: calc(6rem + env(safe-area-inset-bottom, 0px)); }
+  /* === CHATBOT (ViT Assistant) === */
+  #popup-chat-widget { position:fixed; bottom:calc(2rem + env(safe-area-inset-bottom,0px)); left:1.5rem; z-index:45; }
+  #popup-chat-container { position:fixed; bottom:calc(6rem + env(safe-area-inset-bottom,0px)); left:1.5rem; width:90%; max-width:400px; height:70vh; max-height:520px; z-index:45; transition:transform 0.38s cubic-bezier(0.34,1.1,0.64,1), opacity 0.3s; transform:translateY(22px) scale(0.92); opacity:0; pointer-events:none; }
   #popup-chat-container.open { transform:translateY(0) scale(1); opacity:1; pointer-events:auto; }
+
+  /* === BUYER-SELLER CHAT FAB === */
+  #order-chat-fab-widget { position:fixed; bottom:calc(2rem + env(safe-area-inset-bottom,0px)); right:1.5rem; z-index:45; }
+  #order-chat-fab-container {
+    position:fixed; bottom:calc(6rem + env(safe-area-inset-bottom,0px)); right:1.5rem;
+    width:90%; max-width:380px; height:72vh; max-height:560px;
+    z-index:45; display:flex; flex-direction:column;
+    background:rgba(255,255,255,0.97); backdrop-filter:blur(24px);
+    border:1px solid rgba(139,92,246,0.18); border-radius:22px;
+    box-shadow:0 12px 60px rgba(139,92,246,0.22);
+    transition:transform 0.38s cubic-bezier(0.34,1.1,0.64,1), opacity 0.3s;
+    transform:translateY(22px) scale(0.92); opacity:0; pointer-events:none;
+    overflow:hidden; will-change:transform;
+  }
+  .dark #order-chat-fab-container { background:rgba(12,8,28,0.97); border-color:rgba(139,92,246,0.22); }
+  #order-chat-fab-container.open { transform:translateY(0) scale(1); opacity:1; pointer-events:auto; }
+  @media(max-width:640px){
+    #order-chat-fab-widget { right:1rem; bottom:calc(4.8rem + env(safe-area-inset-bottom,0px)); }
+    #order-chat-fab-container { right:0.5rem; left:0.5rem; width:auto; max-width:none; bottom:calc(8.5rem + env(safe-area-inset-bottom,0px)); }
+    #popup-chat-widget { left:1rem; bottom:calc(4.8rem + env(safe-area-inset-bottom,0px)); }
+    #popup-chat-container { left:0.5rem; right:0.5rem; width:auto; max-width:none; bottom:calc(8.5rem + env(safe-area-inset-bottom,0px)); }
+  }
+  /* Inbox list inside the FAB */
+  .chat-fab-inbox-item { display:flex; align-items:center; gap:12px; padding:12px 14px; cursor:pointer; border-bottom:1px solid rgba(139,92,246,0.07); transition:background 0.15s; }
+  .chat-fab-inbox-item:hover { background:rgba(139,92,246,0.05); }
+  .chat-fab-inbox-item:last-child { border-bottom:none; }
+  /* Unread dot */
+  #order-chat-fab-unread { position:absolute; top:-5px; right:-5px; background:#f43f5e; color:white; font-size:10px; font-weight:800; min-width:18px; height:18px; border-radius:99px; display:none; align-items:center; justify-content:center; padding:0 3px; line-height:1; border:2px solid white; }
 
   /* === CHAT TEXT FIX === */
   .bot-bubble { background:rgba(241,240,255,0.95); color:#1a1430 !important; border:1px solid rgba(139,92,246,0.12); }
@@ -1103,6 +1131,7 @@ tailwind.config = {
 </div>
 
 <div id="popup-chat-widget"></div>
+<div id="order-chat-fab-widget"></div>
 <div id="message-container" class="fixed top-20 right-5 z-50 space-y-3"></div>
 
 <!-- NOTIFICATION DROPDOWN -->
@@ -6165,43 +6194,224 @@ document.body.addEventListener('click', e => {
   if (!btn) return; e.stopPropagation(); openChat(btn.dataset.chatId);
 });
 
-// ── Seller real-time inbox ────────────────────────────────
+// ── FLOATING CHAT FAB — buyer & seller inbox ──────────────
 let _inboxRenderTimer = null;
-const renderSellerChatInbox = () => {};  // no-op, replaced by startSellerInbox
+let _fabChatsSnap = null; // latest snapshot from both queries
 
-const startSellerInbox = () => {
-  if (!currentUser) return;
-  _inboxUnsubscribe();
-  _inboxUnsubscribe = db.collection('chats')
-    .where('sellerId', '==', currentUser.uid)
-    .orderBy('lastMessageAt', 'desc').limit(30)
-    .onSnapshot(snap => {
-      clearTimeout(_inboxRenderTimer);
-      _inboxRenderTimer = setTimeout(() => {
-        _renderInboxSnap(snap);
-        _updateChatBadge(snap);
-      }, 120);
-    }, err => console.warn('Inbox listener:', err.code));
+// renderSellerChatInbox still used by My Listings page section
+const renderSellerChatInbox = () => {
+  if (_fabChatsSnap) _renderFabInbox(_fabChatsSnap);
 };
 
-const stopSellerInbox = () => { _inboxUnsubscribe(); _inboxUnsubscribe = () => {}; };
+const _buildFabHTML = () => {
+  const fabWidget = document.getElementById('order-chat-fab-widget');
+  if (!fabWidget || !currentUser) return;
+  fabWidget.innerHTML = `
+    <div id="order-chat-fab-container">
+      <!-- Header -->
+      <div class="flex-shrink-0 px-4 py-3.5 border-b border-vit-500/10 flex items-center justify-between"
+        style="background:linear-gradient(135deg,#7c3aed,#06b6d4)">
+        <div class="flex items-center gap-3">
+          <div style="width:34px;height:34px;background:rgba(255,255,255,0.18);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px">💬</div>
+          <div>
+            <h3 class="text-sm font-bold text-white">My Chats</h3>
+            <p class="text-xs text-white/70" id="fab-chat-subtitle">Loading…</p>
+          </div>
+        </div>
+        <button id="close-order-chat-fab-btn" class="text-white/60 hover:text-white text-2xl w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors">&times;</button>
+      </div>
+      <!-- Tab bar: As Buyer / As Seller -->
+      <div class="flex-shrink-0 flex border-b border-vit-500/10">
+        <button id="fab-tab-buyer" class="fab-tab-btn flex-1 py-2.5 text-xs font-bold transition-all border-b-2 border-vit-500 text-vit-600 dark:text-vit-400 bg-vit-50/50 dark:bg-vit-900/10">
+          🛒 As Buyer
+        </button>
+        <button id="fab-tab-seller" class="fab-tab-btn flex-1 py-2.5 text-xs font-bold transition-all border-b-2 border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+          🏪 As Seller
+        </button>
+      </div>
+      <!-- Inbox list -->
+      <div id="fab-inbox-list" class="flex-grow overflow-y-auto" style="-webkit-overflow-scrolling:touch;"></div>
+    </div>
+    <!-- FAB Button -->
+    <button id="open-order-chat-fab-btn"
+      class="w-14 h-14 text-white rounded-2xl shadow-2xl flex items-center justify-center shimmer-btn animate-float"
+      style="background:linear-gradient(135deg,#06b6d4,#7c3aed);box-shadow:0 8px 28px rgba(6,182,212,0.45);position:relative"
+      aria-label="Open chats">
+      <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z"/>
+      </svg>
+      <span id="order-chat-fab-unread" style="display:none;position:absolute;top:-5px;right:-5px;background:#f43f5e;color:white;font-size:10px;font-weight:800;min-width:18px;height:18px;border-radius:99px;align-items:center;justify-content:center;padding:0 3px;line-height:1;border:2px solid white;">0</span>
+    </button>`;
 
-const _renderInboxSnap = (snap) => {
-  const el = document.getElementById('seller-chat-inbox');
-  if (!el) return;
-  if (snap.empty) {
-    el.innerHTML = `<div class="flex flex-col items-center py-10 gap-2 text-center"><div class="text-4xl">💬</div><p class="text-gray-400 text-sm font-medium">No buyer chats yet.</p><p class="text-gray-400 text-xs">When a buyer purchases your item and messages you, it shows here.</p></div>`;
+  // FAB open/close
+  document.getElementById('open-order-chat-fab-btn')?.addEventListener('click', () => {
+    const fab = document.getElementById('order-chat-fab-container');
+    const isOpen = fab.classList.contains('open');
+    if (isOpen) { fab.classList.remove('open'); }
+    else { fab.classList.add('open'); _loadFabInbox(); }
+    // Close chatbot if open
+    document.getElementById('popup-chat-container')?.classList.remove('open');
+    document.getElementById('open-popup-chat-btn')?.classList.remove('hidden');
+  });
+  document.getElementById('close-order-chat-fab-btn')?.addEventListener('click', () => {
+    document.getElementById('order-chat-fab-container')?.classList.remove('open');
+  });
+
+  // Tabs
+  let _fabActiveTab = 'buyer';
+  const setFabTab = (tab) => {
+    _fabActiveTab = tab;
+    const buyerBtn  = document.getElementById('fab-tab-buyer');
+    const sellerBtn = document.getElementById('fab-tab-seller');
+    buyerBtn.className  = `fab-tab-btn flex-1 py-2.5 text-xs font-bold transition-all border-b-2 ${tab==='buyer'  ? 'border-vit-500 text-vit-600 dark:text-vit-400 bg-vit-50/50 dark:bg-vit-900/10' : 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`;
+    sellerBtn.className = `fab-tab-btn flex-1 py-2.5 text-xs font-bold transition-all border-b-2 ${tab==='seller' ? 'border-vit-500 text-vit-600 dark:text-vit-400 bg-vit-50/50 dark:bg-vit-900/10' : 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`;
+    if (_fabChatsSnap) _renderFabInbox(_fabChatsSnap, tab);
+  };
+  document.getElementById('fab-tab-buyer')?.addEventListener('click',  () => setFabTab('buyer'));
+  document.getElementById('fab-tab-seller')?.addEventListener('click', () => setFabTab('seller'));
+
+  // Expose setFabTab for the snapshot callbacks
+  window._setFabTab = setFabTab;
+  window._getFabActiveTab = () => _fabActiveTab;
+};
+
+const _loadFabInbox = () => {
+  if (!currentUser) return;
+  _inboxUnsubscribe();
+
+  // Listen to ALL chats where user is buyer OR seller
+  // Firestore doesn't support OR queries across fields, so run two parallel listeners
+  let buyerSnap  = null;
+  let sellerSnap = null;
+
+  const merge = () => {
+    if (!buyerSnap && !sellerSnap) return;
+    const allDocs = [
+      ...(buyerSnap  ? buyerSnap.docs  : []),
+      ...(sellerSnap ? sellerSnap.docs : []),
+    ].sort((a,b) => {
+      const ta = a.data().lastMessageAt?.toMillis?.() || 0;
+      const tb = b.data().lastMessageAt?.toMillis?.() || 0;
+      return tb - ta;
+    });
+    // Dedupe
+    const seen = new Set();
+    const merged = allDocs.filter(d => { if (seen.has(d.id)) return false; seen.add(d.id); return true; });
+    _fabChatsSnap = { docs: merged };
+    clearTimeout(_inboxRenderTimer);
+    _inboxRenderTimer = setTimeout(() => {
+      _renderFabInbox(_fabChatsSnap, window._getFabActiveTab?.() || 'buyer');
+      _updateFabBadge(_fabChatsSnap);
+      _updateMyListingsInbox(_fabChatsSnap);
+    }, 100);
+  };
+
+  const unsub1 = db.collection('chats')
+    .where('buyerId',  '==', currentUser.uid)
+    .orderBy('lastMessageAt','desc').limit(20)
+    .onSnapshot(s => { buyerSnap  = s; merge(); }, err => console.warn('Buyer chats:', err.code));
+
+  const unsub2 = db.collection('chats')
+    .where('sellerId', '==', currentUser.uid)
+    .orderBy('lastMessageAt','desc').limit(20)
+    .onSnapshot(s => { sellerSnap = s; merge(); }, err => console.warn('Seller chats:', err.code));
+
+  _inboxUnsubscribe = () => { unsub1(); unsub2(); };
+};
+
+const _chatTime = (ts) => {
+  if (!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const now = new Date();
+  return d.toDateString() === now.toDateString()
+    ? d.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' })
+    : d.toLocaleDateString('en-IN', { day:'numeric', month:'short' });
+};
+
+const _renderFabInbox = (snapData, tab) => {
+  const el = document.getElementById('fab-inbox-list');
+  if (!el || !currentUser) return;
+  const activeTab = tab || window._getFabActiveTab?.() || 'buyer';
+
+  const filtered = snapData.docs.filter(doc => {
+    const d = doc.data();
+    return activeTab === 'buyer'
+      ? d.buyerId  === currentUser.uid
+      : d.sellerId === currentUser.uid;
+  });
+
+  const subtitle = document.getElementById('fab-chat-subtitle');
+  const totalUnread = snapData.docs.reduce((s,d) => {
+    const data = d.data();
+    const isBuyer = data.buyerId === currentUser.uid;
+    return s + (isBuyer ? (data.unreadBuyer||0) : (data.unreadSeller||0));
+  }, 0);
+  if (subtitle) subtitle.textContent = totalUnread > 0 ? `${totalUnread} unread message${totalUnread>1?'s':''}` : `${snapData.docs.length} conversation${snapData.docs.length!==1?'s':''}`;
+
+  if (filtered.length === 0) {
+    el.innerHTML = `
+      <div class="flex flex-col items-center justify-center h-full gap-3 text-center px-6 py-8">
+        <div class="text-5xl">${activeTab==='buyer'?'🛒':'🏪'}</div>
+        <p class="font-bold text-gray-700 dark:text-gray-200 text-sm">${activeTab==='buyer'?'No purchase chats yet':'No buyer chats yet'}</p>
+        <p class="text-gray-400 text-xs leading-relaxed">${activeTab==='buyer'?'When you buy something, chat with the seller here to arrange pickup.':'When someone buys your listing, they can chat with you here.'}</p>
+      </div>`;
     return;
   }
-  el.innerHTML = snap.docs.map(doc => {
+
+  el.innerHTML = filtered.map(doc => {
     const c = { id: doc.id, ...doc.data() };
-    const unread = c.unreadSeller || 0;
-    const lastTs = c.lastMessageAt?.toDate?.() || new Date();
-    const now = new Date();
-    const timeStr = lastTs.toDateString() === now.toDateString()
-      ? lastTs.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' })
-      : lastTs.toLocaleDateString('en-IN', { day:'numeric', month:'short' });
+    const isBuyer  = c.buyerId === currentUser.uid;
+    const unread   = isBuyer ? (c.unreadBuyer||0) : (c.unreadSeller||0);
+    const otherName  = isBuyer ? (c.sellerName||'Seller') : (c.buyerName||'Buyer');
+    const otherPhoto = isBuyer ? (c.sellerPhoto||'')      : (c.buyerPhoto||'');
+    const initial    = (otherName[0]||'?').toUpperCase();
+    const timeStr    = _chatTime(c.lastMessageAt);
+    const isOnline   = false; // could add presence later
+
+    return `
+      <div class="chat-fab-inbox-item open-chat-from-fab" data-chat-id="${esc(c.id)}"
+        style="cursor:pointer;${unread>0?'background:rgba(139,92,246,0.04)':''}">
+        <div style="position:relative;flex-shrink:0">
+          <img src="${optimizeImage(otherPhoto,80)||`https://placehold.co/44x44/e8e0ff/7c3aed?text=${initial}`}"
+            style="width:44px;height:44px;border-radius:12px;object-fit:cover;${unread>0?'outline:2px solid #7c3aed;outline-offset:1px':''}"
+            loading="lazy"
+            onerror="this.src='https://placehold.co/44x44/e8e0ff/7c3aed?text=${initial}'">
+          ${isOnline?`<span style="position:absolute;bottom:0;right:0;width:10px;height:10px;background:#34d399;border-radius:50%;border:2px solid white"></span>`:''}
+          ${unread>0?`<span class="chat-inbox-badge" style="position:absolute;top:-4px;right:-4px">${unread>9?'9+':unread}</span>`:''}
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px">
+            <p style="font-weight:${unread>0?800:600};font-size:0.8125rem;color:${unread>0?'var(--vit-primary,#7c3aed)':'inherit'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px"
+              class="text-gray-900 dark:text-white">${esc(otherName)}</p>
+            <span style="font-size:10px;color:${unread>0?'#7c3aed':'#9ca3af'};flex-shrink:0;font-weight:${unread>0?700:400}">${timeStr}</span>
+          </div>
+          <p style="font-size:11px;color:#9ca3af;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+            class="text-gray-400">re: ${esc(c.productName||'Item')}</p>
+          <p style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:${unread>0?600:400}"
+            class="${unread>0?'text-vit-600 dark:text-vit-400':'text-gray-400'}">${c.lastMessage?esc(c.lastMessage):'💬 Say hello!'}</p>
+        </div>
+        <svg style="width:14px;height:14px;flex-shrink:0;color:#d1d5db" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+        </svg>
+      </div>`;
+  }).join('');
+};
+
+// Update the My Listings inbox section if it's visible
+const _updateMyListingsInbox = (snapData) => {
+  const el = document.getElementById('seller-chat-inbox');
+  if (!el || !currentUser) return;
+  const sellerDocs = { docs: snapData.docs.filter(d => d.data().sellerId === currentUser.uid) };
+  if (sellerDocs.docs.length === 0) {
+    el.innerHTML = `<div class="flex flex-col items-center py-10 gap-2 text-center"><div class="text-4xl">💬</div><p class="text-gray-400 text-sm font-medium">No buyer chats yet.</p></div>`;
+    return;
+  }
+  el.innerHTML = sellerDocs.docs.map(doc => {
+    const c = { id: doc.id, ...doc.data() };
+    const unread  = c.unreadSeller || 0;
     const initial = (c.buyerName||'B')[0].toUpperCase();
+    const timeStr = _chatTime(c.lastMessageAt);
     return `
       <button class="open-seller-chat-btn w-full flex items-center gap-3 p-3.5 rounded-xl transition-all text-left group hover:bg-vit-50 dark:hover:bg-vit-900/20 active:scale-[0.98]" data-chat-id="${esc(c.id)}">
         <div class="relative flex-shrink-0">
@@ -6218,46 +6428,56 @@ const _renderInboxSnap = (snap) => {
           <p class="text-xs text-gray-400 truncate">re: ${esc(c.productName||'Item')}</p>
           <p class="text-xs truncate mt-0.5 ${unread>0?'text-vit-600 dark:text-vit-400 font-semibold':'text-gray-400'}">${c.lastMessage?esc(c.lastMessage):'💬 Chat started'}</p>
         </div>
-        <svg class="w-4 h-4 text-gray-300 group-hover:text-vit-500 transition-colors flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        <svg class="w-4 h-4 text-gray-300 group-hover:text-vit-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
       </button>`;
   }).join('');
 };
 
-const _updateChatBadge = (snap) => {
-  const badge = document.getElementById('chat-header-badge');
-  if (!badge) return;
-  const total = snap.docs.reduce((s,d) => s + (d.data().unreadSeller||0), 0);
-  badge.textContent = total > 9 ? '9+' : String(total);
+const _updateFabBadge = (snapData) => {
+  const badge = document.getElementById('order-chat-fab-unread');
+  if (!badge || !currentUser) return;
+  const total = snapData.docs.reduce((s,d) => {
+    const data   = d.data();
+    const isBuyer = data.buyerId === currentUser.uid;
+    return s + (isBuyer ? (data.unreadBuyer||0) : (data.unreadSeller||0));
+  }, 0);
+  badge.textContent  = total > 9 ? '9+' : String(total);
   badge.style.display = total > 0 ? 'flex' : 'none';
 };
 
-const injectChatBellIntoHeader = () => {
-  if (!currentUser || document.getElementById('chat-bell-btn')) return;
-  const container = document.getElementById('header-actions-container');
-  if (!container) return;
-  const wrapper = document.createElement('div');
-  wrapper.style.position = 'relative';
-  wrapper.innerHTML = `
-    <button id="chat-bell-btn" aria-label="Chats" class="icon-btn p-2 rounded-xl glass hover:shadow-lg hover:shadow-vit-500/20 transition-all duration-200" data-tooltip="Buyer Chats">
-      <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
-      <span id="chat-header-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#f43f5e;color:white;font-size:10px;font-weight:800;min-width:16px;height:16px;border-radius:99px;align-items:center;justify-content:center;padding:0 3px;line-height:1;">0</span>
-    </button>`;
-  container.insertBefore(wrapper, container.firstChild);
-  document.getElementById('chat-bell-btn')?.addEventListener('click', () => {
-    setActiveTab('my-listings');
-    setTimeout(() => { document.getElementById('seller-chat-inbox-section')?.scrollIntoView({ behavior:'smooth', block:'start' }); }, 500);
-  });
+// Click handler — open a chat from the FAB inbox
+document.body.addEventListener('click', e => {
+  const item = e.target.closest('.open-chat-from-fab');
+  if (!item) return;
+  e.stopPropagation();
+  const chatId = item.dataset.chatId;
+  // Close FAB inbox, open the full chat panel
+  document.getElementById('order-chat-fab-container')?.classList.remove('open');
+  openChat(chatId);
+});
+
+// initialise FAB + start real-time listener
+const startSellerInbox = () => { _loadFabInbox(); };
+const stopSellerInbox  = () => { _inboxUnsubscribe(); _inboxUnsubscribe = () => {}; };
+
+const injectChatFab = () => {
+  if (!currentUser) return;
+  _buildFabHTML();
+  _loadFabInbox();
 };
 
-document.addEventListener('vitmart-user-ready', () => {
-  startSellerInbox();
-  setTimeout(injectChatBellIntoHeader, 300);
-});
-if (currentUser) { startSellerInbox(); setTimeout(injectChatBellIntoHeader, 300); }
+document.addEventListener('vitmart-user-ready', () => { injectChatFab(); });
+if (currentUser) injectChatFab();
+
+// Remove old header bell if it exists
+document.getElementById('chat-bell-btn')?.closest('div')?.remove();
+document.getElementById('chat-header-badge')?.closest('div')?.remove();
 
 if (typeof NOTIF_ICONS !== 'undefined') {
   NOTIF_ICONS['chat'] = { bg:'bg-blue-100 dark:bg-blue-900/40', icon:'💬' };
 }
+
+
 
 
 // OPTIMISATION: Lazy-load all dynamic images
