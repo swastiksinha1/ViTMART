@@ -4194,12 +4194,10 @@ document.body.addEventListener('click', e => {
   const poBtn = e.target.closest('.open-price-offer-btn');
   if (poBtn) {
     if (!currentUser) { authModal.classList.add('show'); showMessage('Please sign in to make an offer.', 'info'); return; }
-    const p = products.find(x => x.id === poBtn.dataset.id)
-           || (_currentDetailProduct?.id === poBtn.dataset.id ? _currentDetailProduct : null);
-    if (!p) { showMessage('Could not load product details — please refresh and try again.', 'error'); return; }
-    if (p.sellerId && p.sellerId === currentUser.uid) { showMessage("You can't make an offer on your own listing.", 'error'); return; }
-    if (p.status !== 'available') { showMessage('This item is no longer available.', 'info'); return; }
-    renderPriceOfferModal(p);
+    const p = products.find(x=>x.id===poBtn.dataset.id)
+           || (_currentDetailProduct?.id===poBtn.dataset.id ? _currentDetailProduct : null);
+    if (p) renderPriceOfferModal(p);
+    else showMessage('Could not find product details. Please refresh and try again.', 'error');
     return;
   }
   // Edit price modal trigger
@@ -5832,80 +5830,32 @@ const renderPriceOfferModal = (product) => {
 
   content.querySelector('#cancel-price-offer-btn').onclick = () => modal.classList.remove('show');
   content.querySelector('#submit-price-offer-btn').onclick = async () => {
-    // ── Guard 1: re-check auth (session may have expired since modal opened) ──
-    const user = firebase.auth().currentUser;
-    if (!user) {
-      modal.classList.remove('show');
-      authModal.classList.add('show');
-      showMessage('Please sign in to make an offer.', 'info');
-      return;
-    }
-
-    // ── Guard 2: prevent seller from offering on own product ──
-    if (product.sellerId && user.uid === product.sellerId) {
-      showMessage("You can't make an offer on your own listing.", 'error');
-      return;
-    }
-
     const offerPrice = parseFloat(content.querySelector('#offer-price-input').value);
     const msg = content.querySelector('#offer-message-input').value.trim();
-
-    // ── Validation ──
-    if (!offerPrice || offerPrice <= 0) {
-      showMessage('Please enter a valid offer price.', 'error');
-      return;
-    }
-    if (offerPrice >= product.price) {
-      showMessage(`Your offer should be below the listed price of ₹${product.price.toFixed(0)}.`, 'info');
-      return;
-    }
-
+    if (!offerPrice || offerPrice <= 0) { showMessage('Enter a valid offer price.','error'); return; }
     const btn = content.querySelector('#submit-price-offer-btn');
-    btn.disabled = true;
-    btn.innerHTML = `<div class="animate-spin rounded-full h-5 w-5 border-b-2 border-white mx-auto"></div>`;
-
+    btn.disabled=true; btn.innerHTML=`<div class="animate-spin rounded-full h-5 w-5 border-b-2 border-white mx-auto"></div>`;
     try {
-      // ── Write to top-level 'price_offers' collection (subcollection blocked by Firestore rules) ──
-      await db.collection('price_offers').add({
-        productId:   product.id,                // required for queries
-        offerPrice,
-        message:     filterProfanity(msg),
-        buyerId:     user.uid,
-        buyerName:   user.displayName || 'Buyer',
-        buyerPhoto:  user.photoURL    || null,
-        buyerEmail:  user.email,
-        sellerId:    product.sellerId  || null,
-        sellerName:  product.sellerName || null,
-        productName: product.name      || null,
-        originalPrice: product.price,
-        status: 'pending',
+      await db.collection('products').doc(product.id).collection('price_offers').add({
+        offerPrice, message: filterProfanity(msg),
+        buyerId: currentUser.uid, buyerName: currentUser.displayName||'Buyer',
+        buyerPhoto: currentUser.photoURL||null, buyerEmail: currentUser.email,
+        originalPrice: product.price, status: 'pending',
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
-
-      // ── Notify seller ──
-      if (product.sellerId && product.sellerId !== user.uid) {
+      // Notify the seller directly here (most reliable approach)
+      if (product.sellerId && product.sellerId !== currentUser.uid) {
         sendNotification(product.sellerId, {
           type: 'price_offer',
           title: '💰 New Price Offer!',
-          body: `${user.displayName || 'Someone'} offered ₹${offerPrice} for "${product.name}".`,
+          body: `${currentUser.displayName || 'Someone'} offered ₹${offerPrice} for "${product.name}".`,
           productId: product.id
         });
       }
-
-      showMessage('Offer sent! The seller will respond shortly.', 'success');
+      showMessage('Offer sent! The seller will see your offer on their listing.','success');
       modal.classList.remove('show');
-
-    } catch (err) {
-      // Translate Firestore permission errors into a user-friendly message
-      if (err.code === 'permission-denied' || (err.message && err.message.toLowerCase().includes('permission'))) {
-        showMessage('Could not send offer — please sign out and sign back in, then try again.', 'error');
-      } else {
-        showMessage('Error sending offer: ' + err.message, 'error');
-      }
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = 'Send Offer 🤝';
-    }
+    } catch(err) { showMessage('Error: '+err.message,'error'); }
+    finally { btn.disabled=false; btn.innerHTML='Send Offer 🤝'; }
   };
 };
 
@@ -5919,8 +5869,7 @@ const renderPriceOffersSection = (productId, containerId) => {
     <div id="price-offers-list" class="space-y-3"><p class="text-gray-400 text-sm">Loading…</p></div>
   </div>`;
   const list = document.getElementById('price-offers-list');
-  db.collection('price_offers')
-    .where('productId', '==', productId)
+  db.collection('products').doc(productId).collection('price_offers')
     .orderBy('createdAt','desc').limit(20).onSnapshot(snap => {
       if (snap.empty) { list.innerHTML=`<p class="text-gray-400 text-sm">No price offers yet.</p>`; return; }
       list.innerHTML = snap.docs.map(d => {
@@ -5979,13 +5928,12 @@ const renderPriceOffersSection = (productId, containerId) => {
             try {
               const batch = db.batch();
               batch.update(
-                db.collection('price_offers').doc(btn.dataset.id),
+                db.collection('products').doc(btn.dataset.productId).collection('price_offers').doc(btn.dataset.id),
                 { status: 'accepted' }
               );
               // auto-reject other pending offers on the same product
-              const others = await db.collection('price_offers')
-                .where('productId','==', btn.dataset.productId)
-                .where('status','==','pending').get();
+              const others = await db.collection('products').doc(btn.dataset.productId)
+                .collection('price_offers').where('status','==','pending').get();
               others.docs.forEach(d2 => { if (d2.id !== btn.dataset.id) batch.update(d2.ref, {status:'rejected'}); });
               await batch.commit();
               showMessage('Offer accepted! Contact the buyer via email to finalise.', 'success');
@@ -5998,7 +5946,8 @@ const renderPriceOffersSection = (productId, containerId) => {
       list.querySelectorAll('.reject-price-offer-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
           try {
-            await db.collection('price_offers').doc(btn.dataset.id)
+            await db.collection('products').doc(btn.dataset.productId)
+              .collection('price_offers').doc(btn.dataset.id)
               .update({ status: 'rejected' });
             showMessage('Offer declined.', 'success');
           } catch(err) { showMessage('Error: '+err.message, 'error'); }
@@ -6068,7 +6017,8 @@ const renderPriceOffersSection = (productId, containerId) => {
             sendBtn.innerHTML = `<div class="animate-spin rounded-full h-5 w-5 border-b-2 border-white mx-auto"></div>`;
             try {
               // Write ONLY to the offer document — product price is never touched
-              await db.collection('price_offers').doc(btn.dataset.id)
+              await db.collection('products').doc(btn.dataset.productId)
+                .collection('price_offers').doc(btn.dataset.id)
                 .update({
                   status: 'countered',
                   counterPrice,
@@ -6158,8 +6108,7 @@ const renderProductDetailPageV2 = (product) => {
 
   // Show buyer their own offer status on this product (if any)
   if (!isMyProduct && product.status === 'available') {
-    db.collection('price_offers')
-      .where('productId', '==', product.id)
+    db.collection('products').doc(product.id).collection('price_offers')
       .where('buyerId', '==', currentUser.uid)
       .orderBy('createdAt', 'desc').limit(1).get()
       .then(snap => {
@@ -6197,7 +6146,7 @@ const renderProductDetailPageV2 = (product) => {
           const agreedPrice = parseFloat(box.querySelector('#accept-counter-btn').dataset.counterPrice);
           showConfirmModal(`Accept counter offer of ₹${agreedPrice}? Contact the seller to arrange payment.`, async () => {
             try {
-              await db.collection('price_offers').doc(offer.id)
+              await db.collection('products').doc(product.id).collection('price_offers').doc(offer.id)
                 .update({ status: 'accepted', finalPrice: agreedPrice });
               showMessage(`Counter accepted at ₹${agreedPrice}! Contact seller via email.`, 'success');
               document.getElementById('buyer-offer-status')?.remove();
@@ -6208,7 +6157,7 @@ const renderProductDetailPageV2 = (product) => {
         // Decline counter — mark as rejected, buyer can make a new offer
         box.querySelector('#decline-counter-btn')?.addEventListener('click', async () => {
           try {
-            await db.collection('price_offers').doc(offer.id)
+            await db.collection('products').doc(product.id).collection('price_offers').doc(offer.id)
               .update({ status: 'rejected' });
             showMessage('Counter declined. You can make a new offer.', 'success');
             document.getElementById('buyer-offer-status')?.remove();
