@@ -110,35 +110,9 @@ tailwind.config = {
      PERFORMANCE & SMOOTHNESS ENHANCEMENTS
   ═══════════════════════════════════════════ */
 
-  /* GPU-accelerate the elements that animate most */
-  .product-card, .category-card, .hiw-card, .rec-card,
-  .hero-product-card, .faq-item, .feature-pill,
-  #cart-drawer, .modal-content, #notif-dropdown,
-  #popup-chat-container {
+  /* Only promote elements that truly animate position/opacity */
+  .modal-content, #cart-drawer, #notif-dropdown, #popup-chat-container {
     will-change: transform;
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
-  }
-
-  /* ── ULTRA-SMOOTH ENGINE ──────────────────────────────────
-     Spring physics easing for every interactive element.
-     cubic-bezier(0.22,1.4,0.36,1) = overshoot spring feel.
-     All layout-safe (transform + opacity only, no width/height).
-  ─────────────────────────────────────────────────────────── */
-
-  /* Universal smooth base — only transform & opacity, no repaints */
-  *, *::before, *::after {
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-
-  /* Promote all interactive surfaces to compositor thread */
-  button, a, [role="button"], .product-card, .category-card,
-  .nav-item, .mob-nav-item, .cat-pill, .hiw-card, .rec-card,
-  .notice-card, .review-card, .hero-product-card, .faq-item,
-  .icon-btn, .wishlist-btn, .shimmer-btn, .glow-btn,
-  #back-to-top, .tab-btn, .cmd-item {
-    transform: translateZ(0);
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
   }
@@ -823,94 +797,7 @@ tailwind.config = {
   .skeleton-text { height:0.85rem; border-radius:6px; }
   @keyframes skel-shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
 
-  /* ═══════════════════════════════════════════
-     PREMIUM CURSOR SYSTEM — 4 layers
-     aura · ring · dot · canvas trail
-  ═══════════════════════════════════════════ */
-  @media (hover: hover) and (pointer: fine) { body { cursor: none !important; } a, button, [role="button"], input, select, textarea, label { cursor: none !important; } }
-  @media (hover: none) { #cur-aura, #cur-ring, #cur-dot, #cur-trail { display: none !important; } }
-
-  #cur-dot, #cur-ring, #cur-aura {
-    position: fixed;
-    border-radius: 50%;
-    pointer-events: none;
-    z-index: 99999;
-    transform: translate(-50%, -50%);
-    will-change: left, top, width, height, opacity, transform;
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
-  }
-
-  /* DOT — instant sharp follower */
-  #cur-dot {
-    width: 6px; height: 6px;
-    background: #fff;
-    mix-blend-mode: difference;
-    transition: width 0.18s cubic-bezier(0.22,1.4,0.36,1),
-                height 0.18s cubic-bezier(0.22,1.4,0.36,1),
-                opacity 0.2s ease,
-                background 0.2s ease;
-    z-index: 100001;
-  }
-  #cur-dot.hovering { width: 10px; height: 10px; }
-  #cur-dot.clicking { width: 4px; height: 4px; background: #22d3ee; mix-blend-mode: normal; }
-  #cur-dot.on-text   { width: 3px; height: 22px; border-radius: 3px; background: rgba(124,58,237,0.9); mix-blend-mode: normal; }
-
-  /* RING — spring-physics follower with rotating gradient border */
-  #cur-ring {
-    width: 36px; height: 36px;
-    background: transparent;
-    border: 1.5px solid transparent;
-    /* Rotating gradient border via conic-gradient on pseudo */
-    background-clip: padding-box;
-    z-index: 100000;
-    transition: width  0.38s cubic-bezier(0.22,1.4,0.36,1),
-                height 0.38s cubic-bezier(0.22,1.4,0.36,1),
-                opacity 0.28s ease;
-    /* We use outline as the visible ring so it rotates */
-    outline: 1.5px solid rgba(139,92,246,0.55);
-    outline-offset: 0px;
-  }
-  #cur-ring::before {
-    content: '';
-    position: absolute;
-    inset: -2px;
-    border-radius: 50%;
-    background: conic-gradient(from 0deg, #7c3aed, #06b6d4, #f43f5e, #7c3aed);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    animation: cur-ring-spin 2.4s linear infinite;
-    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #fff calc(100% - 2px));
-    mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #fff calc(100% - 2px));
-  }
-  #cur-ring.hovering {
-    width: 56px; height: 56px;
-    outline-color: transparent;
-  }
-  #cur-ring.hovering::before { opacity: 1; }
-  #cur-ring.clicking { width: 28px; height: 28px; outline-color: rgba(34,211,238,0.8); }
-  #cur-ring.clicking::before { opacity: 0; }
-  #cur-ring.on-text  { width: 24px; height: 24px; border-radius: 4px; }
-  @keyframes cur-ring-spin { to { transform: translate(-50%,-50%) rotate(360deg); } }
-
-  /* AURA — slow magnetic glow, furthest behind */
-  #cur-aura {
-    width: 90px; height: 90px;
-    background: radial-gradient(circle, rgba(124,58,237,0.14) 0%, rgba(6,182,212,0.06) 55%, transparent 72%);
-    z-index: 99998;
-    opacity: 0;
-    transition: opacity 0.45s ease,
-                width  0.55s cubic-bezier(0.22,1.05,0.36,1),
-                height 0.55s cubic-bezier(0.22,1.05,0.36,1);
-  }
-  #cur-aura.hovering {
-    width: 130px; height: 130px; opacity: 1;
-    background: radial-gradient(circle, rgba(124,58,237,0.2) 0%, rgba(6,182,212,0.09) 55%, transparent 72%);
-  }
-  #cur-aura.clicking {
-    width: 60px; height: 60px;
-    background: radial-gradient(circle, rgba(34,211,238,0.3) 0%, transparent 65%);
-  }
+  /* cursor: system default restored — custom cursor removed for performance */
 
   /* === SCROLL PROGRESS === */
   #scroll-progress { position:fixed; top:0; left:0; height:2.5px; width:0%; background:linear-gradient(90deg,#7c3aed 0%,#06b6d4 50%,#f43f5e 100%); z-index:9998; transition:width 0.07s linear; box-shadow:0 0 14px rgba(139,92,246,0.8); }
@@ -953,7 +840,7 @@ tailwind.config = {
   .wishlist-btn:active { transform:scale(0.88); }
 
   /* === 3D TILT === */
-  .tilt-card { transform-style:preserve-3d; will-change:transform; }
+  .tilt-card { transform-style:preserve-3d; }
   .tilt-shine { position:absolute; inset:0; border-radius:inherit; background:radial-gradient(circle at var(--mx,50%) var(--my,50%), rgba(255,255,255,0.16) 0%, transparent 65%); pointer-events:none; z-index:10; opacity:0; transition:opacity 0.3s; }
   .tilt-card:hover .tilt-shine { opacity:1; }
 
@@ -1217,12 +1104,7 @@ tailwind.config = {
   </div>
 </div>
 
-<!-- CUSTOM CURSOR -->
-<!-- Premium 4-layer cursor -->
-<div id="cur-aura"></div>
-<div id="cur-ring"></div>
-<div id="cur-dot"></div>
-<canvas id="cur-trail" style="position:fixed;inset:0;pointer-events:none;z-index:99990;"></canvas>
+<!-- cursor: default system cursor (custom cursor removed for performance) -->
 
 <!-- SCROLL PROGRESS BAR -->
 <div id="scroll-progress"></div>
@@ -4253,173 +4135,7 @@ setTimeout(hideLoader, 2000);  // Hard cap at 2s — never stays stuck
 document.addEventListener('vitmart-user-ready', hideLoader); // Hide as soon as auth resolves
 
 // ══════════════════════════════════════════════════════════════
-// PREMIUM CURSOR ENGINE — dot · ring · aura · canvas trail
-// Spring physics · magnetic snap · text morph · click burst
-// ══════════════════════════════════════════════════════════════
-const curDot   = document.getElementById('cur-dot');
-const curRing  = document.getElementById('cur-ring');
-const curAura  = document.getElementById('cur-aura');
-const curTrail = document.getElementById('cur-trail');
-// Legacy aliases kept for any remaining references
-const cursorInner = curDot;
-const cursorOuter = curRing;
-
-const isTouchDevice = () => window.matchMedia('(hover: none)').matches;
-if (isTouchDevice()) {
-  [curDot, curRing, curAura, curTrail].forEach(el => el && (el.style.display = 'none'));
-}
-
-// ── Resize trail canvas ───────────────────────────────────────
-const _resizeTrail = () => {
-  if (!curTrail) return;
-  curTrail.width  = window.innerWidth;
-  curTrail.height = window.innerHeight;
-};
-_resizeTrail();
-window.addEventListener('resize', _resizeTrail, { passive: true });
-const trailCtx = curTrail?.getContext('2d');
-
-// ── State ─────────────────────────────────────────────────────
-let mX = window.innerWidth / 2, mY = window.innerHeight / 2;
-
-// Ring spring
-let rX = mX, rY = mY, rVX = 0, rVY = 0;
-const R_SPRING = 0.14, R_DAMP = 0.68;
-
-// Aura spring (lazier)
-let aX = mX, aY = mY, aVX = 0, aVY = 0;
-const A_SPRING = 0.07, A_DAMP = 0.62;
-
-// Trail circular buffer
-const TRAIL_LEN = 24;
-const trail = Array.from({ length: TRAIL_LEN }, () => ({ x: mX, y: mY }));
-let trailHead = 0;
-
-let isHovering = false, isClicking = false, _cursorVisible = true;
-
-// ── Magnetic snap ─────────────────────────────────────────────
-const MAG_RADIUS = 70, MAG_STRENGTH = 0.30;
-const _MAG_SEL = 'button, a, .cat-pill, .product-card, .category-card, .mob-nav-item, .nav-item, .wishlist-btn';
-
-const _getMag = () => {
-  const els = document.querySelectorAll(_MAG_SEL);
-  let best = null, bestD = MAG_RADIUS;
-  els.forEach(el => {
-    const rc = el.getBoundingClientRect();
-    const cx = rc.left + rc.width / 2, cy = rc.top + rc.height / 2;
-    const d  = Math.hypot(mX - cx, mY - cy);
-    if (d < bestD) { bestD = d; best = { cx, cy }; }
-  });
-  return best;
-};
-
-// ── Canvas trail ──────────────────────────────────────────────
-const _drawTrail = () => {
-  if (!trailCtx || !_cursorVisible) return;
-  trailCtx.clearRect(0, 0, curTrail.width, curTrail.height);
-  for (let i = 0; i < TRAIL_LEN - 1; i++) {
-    const p  = trail[(trailHead + i) % TRAIL_LEN];
-    const p2 = trail[(trailHead + i + 1) % TRAIL_LEN];
-    const t  = i / TRAIL_LEN;                     // 0=oldest 1=newest
-    const r  = 1.2 + t * 3.8;
-    const al = (isHovering ? 0.6 : 0.3) * t * t;
-    const hue = 265 + t * 90;                      // purple→cyan gradient
-    trailCtx.beginPath();
-    trailCtx.moveTo(p.x, p.y);
-    trailCtx.lineTo(p2.x, p2.y);
-    trailCtx.strokeStyle = `hsla(${hue},80%,65%,${al})`;
-    trailCtx.lineWidth = r;
-    trailCtx.lineCap = 'round';
-    trailCtx.stroke();
-    if (i > TRAIL_LEN * 0.55) {
-      trailCtx.beginPath();
-      trailCtx.arc(p2.x, p2.y, r * 0.65, 0, Math.PI * 2);
-      trailCtx.fillStyle = `hsla(${hue + 20},85%,70%,${al * 0.55})`;
-      trailCtx.fill();
-    }
-  }
-};
-
-// ── Click burst ───────────────────────────────────────────────
-const _burst = (x, y) => {
-  if (!trailCtx) return;
-  const pts = Array.from({ length: 12 }, (_, i) => ({
-    ang: (i / 12) * Math.PI * 2, r: 0,
-    maxR: 16 + Math.random() * 16, al: 1,
-    hue: 265 + Math.random() * 110
-  }));
-  let f = 0;
-  const draw = () => {
-    f++;
-    pts.forEach(b => {
-      b.r  += (b.maxR - b.r) * 0.2;
-      b.al *= 0.82;
-      trailCtx.beginPath();
-      trailCtx.arc(x + Math.cos(b.ang) * b.r, y + Math.sin(b.ang) * b.r, 2.8, 0, Math.PI * 2);
-      trailCtx.fillStyle = `hsla(${b.hue},85%,68%,${b.al})`;
-      trailCtx.fill();
-    });
-    if (f < 22) requestAnimationFrame(draw);
-  };
-  requestAnimationFrame(draw);
-};
-
-// ── RAF loop ──────────────────────────────────────────────────
-const _curLoop = () => {
-  const mag = isHovering ? _getMag() : null;
-  const tX  = mag ? mX + (mag.cx - mX) * MAG_STRENGTH : mX;
-  const tY  = mag ? mY + (mag.cy - mY) * MAG_STRENGTH : mY;
-
-  if (curDot) { curDot.style.left = tX + 'px'; curDot.style.top = tY + 'px'; }
-
-  // Ring spring
-  rVX = (rVX + (tX - rX) * R_SPRING) * R_DAMP; rX += rVX;
-  rVY = (rVY + (tY - rY) * R_SPRING) * R_DAMP; rY += rVY;
-  if (curRing) { curRing.style.left = rX + 'px'; curRing.style.top = rY + 'px'; }
-
-  // Aura spring
-  aVX = (aVX + (mX - aX) * A_SPRING) * A_DAMP; aX += aVX;
-  aVY = (aVY + (mY - aY) * A_SPRING) * A_DAMP; aY += aVY;
-  if (curAura) { curAura.style.left = aX + 'px'; curAura.style.top = aY + 'px'; }
-
-  // Trail
-  trailHead = (trailHead + 1) % TRAIL_LEN;
-  trail[trailHead] = { x: tX, y: tY };
-  _drawTrail();
-
-  requestAnimationFrame(_curLoop);
-};
-if (!isTouchDevice()) _curLoop();
-
-// ── Mouse events ──────────────────────────────────────────────
-document.addEventListener('mousemove', e => { if (!isTouchDevice()) { mX = e.clientX; mY = e.clientY; } }, { passive: true });
-document.addEventListener('mouseleave', () => { _cursorVisible = false; [curDot,curRing,curAura].forEach(el=>el&&(el.style.opacity='0')); });
-document.addEventListener('mouseenter', () => { _cursorVisible = true;  [curDot,curRing,curAura].forEach(el=>el&&(el.style.opacity='1')); });
-document.addEventListener('mousedown', e => {
-  isClicking = true;
-  [curDot,curRing,curAura].forEach(el=>el?.classList.add('clicking'));
-  _burst(e.clientX, e.clientY);
-});
-document.addEventListener('mouseup', () => { isClicking = false; [curDot,curRing,curAura].forEach(el=>el?.classList.remove('clicking')); });
-
-const _HOVER_SEL = 'button, a, [data-tab], .product-card, .category-card, .cat-pill, .mob-nav-item, .nav-item, .wishlist-btn, .icon-btn, label, [role="button"]';
-const _TEXT_SEL  = 'input[type="text"], input[type="email"], input[type="password"], input[type="number"], textarea';
-document.body.addEventListener('mouseover', e => {
-  if (e.target.closest(_TEXT_SEL)) {
-    isHovering = false;
-    [curDot,curRing].forEach(el=>{el?.classList.remove('hovering');el?.classList.add('on-text');});
-    curAura?.classList.remove('hovering');
-  } else if (e.target.closest(_HOVER_SEL)) {
-    isHovering = true;
-    [curDot,curRing,curAura].forEach(el=>{el?.classList.remove('on-text');el?.classList.add('hovering');});
-  }
-}, { passive: true });
-document.body.addEventListener('mouseout', e => {
-  if (e.target.closest(_HOVER_SEL) || e.target.closest(_TEXT_SEL)) {
-    isHovering = false;
-    [curDot,curRing,curAura].forEach(el=>el?.classList.remove('hovering','on-text'));
-  }
-}, { passive: true });
+// Custom cursor removed — system default cursor active
 
 // ══════════════════════════════════════════════
 // PREMIUM FEATURE 3+4: SCROLL PROGRESS + BACK-TO-TOP
