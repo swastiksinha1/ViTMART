@@ -61,80 +61,121 @@ ViTMART solves these issues by creating a secure student-only marketplace ecosys
 ## 📂 Project Structure
 
 ```bash
-ViTMART/
+ViTMART
 │
-├── index.html
-├── style.css
-├── script.js
-├── assets/
-├── screenshots/
-└── README.md 
+├── 📄 index.html          # Main homepage
+├── 📄 style.css           # Styling and UI design
+├── 📄 script.js           # Main JavaScript logic
+│
+├── 📁 assets/             # Images, icons, and static files
+│
+├── 📁 screenshots/        # Project screenshots for README
+│
+└── 📄 README.md           # Project documentation
+```
 
-⚙️ Installation & Setup
 
-1️⃣ Clone the Repository
+---
+
+## ⚙️ Installation & Setup
+
+### 1️⃣ Clone the Repository
+
+```bash
 git clone https://github.com/swastiksinha1/ViTMART.git
+```
 
-2️⃣ Open Project Directory
+### 2️⃣ Navigate to the Project Folder
+
+```bash
 cd ViTMART
-3️⃣ Run the Project
+```
 
-Open index.html directly in the browser
-OR use Live Server in VS Code.
+### 3️⃣ Run the Project
 
-🔥 Firebase Configuration
+Open the `index.html` file directly in your browser  
+or use **Live Server** in VS Code for a better development experience.
 
-Create a Firebase project and enable:
+---
 
-Authentication
-Firestore Database / Realtime Database
+## 🔥 Firebase Configuration
 
-Add your Firebase configuration:
+Create a Firebase project and enable the following services:
 
+- Firebase Authentication
+- Firestore Database / Realtime Database
+
+Add your Firebase configuration inside your JavaScript file:
+
+```javascript
 const firebaseConfig = {
   apiKey: "YOUR_API_KEY",
   authDomain: "YOUR_DOMAIN",
   projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_BUCKET",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
 };
+```
+
+---
 
 
-🌟 Future Improvements
-| Planned Feature               | Status  |
-| ----------------------------- | ------- |
-| 💳 Payment Integration        | Planned |
-| ⭐ Seller Ratings & Reviews    | Planned |
-| 📦 Order Tracking             | Planned |
-| 🧠 AI Product Recommendations | Planned |
-| 📲 Mobile Application         | Planned |
+## 🌟 Future Improvements
 
-👨‍💻 Developer
-| Name          | Role                 |
-| ------------- | -------------------- |
-| Swastik Sinha | Full Stack Developer |
+| Feature | Status |
+| :--- | :---: |
+| 💳 Payment Gateway Integration | 🚧 Planned |
+| ⭐ Seller Ratings & Reviews | 🚧 Planned |
+| 📦 Order Tracking System | 🚧 Planned |
+| 🧠 AI-Based Product Recommendations | 🚧 Planned |
+| 📲 Mobile Application Version | 🚧 Planned |
 
-📈 Learning Outcomes
+---
 
-Through this project, I gained experience in:
+## 👨‍💻 Developer
 
-Frontend Development
-Firebase Integration
-Authentication Systems
-Real-Time Communication
-Responsive UI Design
-Product Thinking & Problem Solving
+<div align="center">
 
-⭐ Support
+### Swastik Sinha  
+Full Stack Developer • VIT Bhopal
 
-If you like this project:
+</div>
 
-⭐ Star the repository
-🍴 Fork the project
-🛠️ Contribute to improvements
+---
 
-📄 License
+## 📈 Learning Outcomes
 
-This project is licensed under the MIT License.
-🏷️ Suggested GitHub Topics
+This project helped in gaining practical experience in:
+
+- Frontend Web Development
+- Firebase Authentication & Database
+- Real-Time Communication Systems
+- Responsive UI/UX Design
+- Product-Oriented Development
+- Problem Solving using Technology
+
+---
+
+## ⭐ Support
+
+If you liked this project:
+
+- ⭐ Star the repository
+- 🍴 Fork the project
+- 🛠️ Contribute to improvements
+
+---
+
+## 📄 License
+
+This project is licensed under the **MIT License**.
+
+---
+
+## 🏷️ GitHub Topics
+
+```txt
 marketplace
 student-marketplace
 firebase
@@ -145,5 +186,5 @@ ecommerce
 vit-bhopal
 frontend
 college-project
-
+```
 
