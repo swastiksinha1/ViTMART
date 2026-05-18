@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🛒 ViTMART  
+# ⚡ ViTMART  
 ### Student Marketplace for VIT Bhopal
 
 ### Buy • Sell • Trade within the Campus Community
