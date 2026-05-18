@@ -1,50 +1,66 @@
-🛒 ViTMART — Student Marketplace for VIT Bhopal
 <div align="center">
-Buy • Sell • Trade within the Campus Community
+
+# 🛒 ViTMART  
+### Student Marketplace for VIT Bhopal
+
+### Buy • Sell • Trade within the Campus Community
 
 A modern student marketplace platform built for VIT Bhopal students with real-time chat, Firebase authentication, and a seamless user experience.
 
 </div>
-📌 Overview
+
+---
+
+## 📌 Overview
 
 ViTMART is a campus-focused marketplace platform designed to help students buy, sell, and exchange products securely within the VIT Bhopal community. The platform provides a trusted ecosystem for students to trade books, gadgets, accessories, and other essentials while enabling smooth communication through real-time chat functionality.
 
 The project focuses on solving real-world campus problems through modern web technologies, responsive design, and user-centric development.
 
-🚀 Features
-| Feature                    | Description                                    |
-| -------------------------- | ---------------------------------------------- |
-| 🔐 Firebase Authentication | Secure login and signup system                 |
-| 🛍️ Marketplace Listings   | Buy and sell products easily                   |
-| 💬 Real-Time Chat          | Instant communication between buyers & sellers |
-| 🤖 Chatbot Support         | Interactive assistance for users               |
-| 📱 Responsive Design       | Optimized for desktop and mobile devices       |
-| ⚡ Fast Performance         | Lightweight and efficient frontend             |
-| 🔎 Product Discovery       | Easy browsing and product search               |
+---
 
-🛠️ Tech Stack
-| Category         | Technologies                  |
-| ---------------- | ----------------------------- |
-| Frontend         | HTML, CSS, JavaScript         |
-| Backend Services | Firebase                      |
-| Authentication   | Firebase Auth                 |
-| Database         | Firestore / Realtime Database |
-| Hosting          | Firebase Hosting (Optional)   |
+## 🚀 Features
 
+| Feature | Description |
+| :--- | :--- |
+| 🔐 Firebase Authentication | Secure login and signup system |
+| 🛍️ Marketplace Listings | Buy and sell products easily |
+| 💬 Real-Time Chat | Instant communication between buyers & sellers |
+| 🤖 Chatbot Support | Interactive assistance for users |
+| 📱 Responsive Design | Optimized for desktop and mobile devices |
+| ⚡ Fast Performance | Lightweight and efficient frontend |
+| 🔎 Product Discovery | Easy browsing and product search |
 
-🎯 Problem Statement
+---
+
+## 🛠️ Tech Stack
+
+| Category | Technologies |
+| :--- | :--- |
+| Frontend | HTML, CSS, JavaScript |
+| Backend Services | Firebase |
+| Authentication | Firebase Auth |
+| Database | Firestore / Realtime Database |
+| Hosting | Firebase Hosting |
+
+---
+
+## 🎯 Problem Statement
 
 Students often face difficulties while:
 
-Finding affordable second-hand products
-Connecting with trusted buyers or sellers
-Communicating efficiently during transactions
-Selling unused items quickly within campus
+- Finding affordable second-hand products
+- Connecting with trusted buyers or sellers
+- Communicating efficiently during transactions
+- Selling unused items quickly within campus
 
 ViTMART solves these issues by creating a secure student-only marketplace ecosystem.
 
+---
 
-📂 Project Structure
+## 📂 Project Structure
+
+```bash
 ViTMART/
 │
 ├── index.html
@@ -52,7 +68,7 @@ ViTMART/
 ├── script.js
 ├── assets/
 ├── screenshots/
-└── README.md
+└── README.md 
 
 ⚙️ Installation & Setup
 
