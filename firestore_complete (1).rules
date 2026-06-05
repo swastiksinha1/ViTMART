@@ -79,7 +79,10 @@ service cloud.firestore {
                     && validNum('price', 1, 1000000)
                     && incoming().status == 'available';
       allow update: if isVerified()
-                    && (existing().sellerId == request.auth.uid || isAdmin())
+                    && (
+                      (existing().sellerId == request.auth.uid || isAdmin())
+                      || (onlyChanging(['status']) && existing().status == 'available' && incoming().status == 'sold')
+                    )
                     && notChanging('sellerId') && notChanging('createdAt')
                     && (!('price' in incoming()) || validNum('price', 1, 1000000))
                     && (!('status' in incoming()) || incoming().status in ['available','sold','traded','pending','removed']);
@@ -194,6 +197,29 @@ service cloud.firestore {
         allow update: if false;
         allow delete: if isVerified() && (resource.data.authorId == request.auth.uid || isAdmin());
       }
+    }
+
+    // ── /chats/{chatId} ───────────────────────────────────────────────────
+    match /chats/{chatId} {
+      allow read: if isVerified() && (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid);
+      allow create: if isVerified() && (incoming().buyerId == request.auth.uid || incoming().sellerId == request.auth.uid);
+      allow update: if isVerified() && (existing().buyerId == request.auth.uid || existing().sellerId == request.auth.uid);
+      allow delete: if isVerified() && (existing().buyerId == request.auth.uid || existing().sellerId == request.auth.uid || isAdmin());
+
+      match /messages/{messageId} {
+        allow read: if isVerified();
+        allow create: if isVerified() && incoming().senderId == request.auth.uid;
+        allow update: if false;
+        allow delete: if isAdmin() || (existing().senderId == request.auth.uid);
+      }
+    }
+
+    // ── /notifications/{notificationId} ───────────────────────────────────
+    match /notifications/{notificationId} {
+      allow read: if isVerified() && resource.data.userId == request.auth.uid;
+      allow create: if isVerified();
+      allow update: if isVerified() && existing().userId == request.auth.uid && onlyChanging(['read']);
+      allow delete: if isVerified() && existing().userId == request.auth.uid;
     }
 
     // ── catch-all: deny everything not explicitly matched ─────────────────
